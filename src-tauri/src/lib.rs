@@ -49,12 +49,11 @@ pub fn run() {
                     .separator()
                     .text("quit", "Quit")
                     .build()?;
-                TrayIconBuilder::with_id("authio-tray")
+                let tray = TrayIconBuilder::with_id("authio-tray")
                     .tooltip("Authio")
                     .icon(app.default_window_icon().expect("window icon missing").clone())
                     .menu(&menu)
                     .show_menu_on_left_click(false)
-                    .visible(tray_enabled)
                     .on_menu_event(|app, event| match event.id().as_ref() {
                         "show" => show_main_window(app),
                         "lock" => {
@@ -76,6 +75,8 @@ pub fn run() {
                         }
                     })
                     .build(app)?;
+                // TrayIconBuilder has no `visible()` proxy on pinned tray-icon; toggle post-build.
+                let _ = tray.set_visible(tray_enabled);
             }
 
             let win = app.get_webview_window("main").ok_or("main window missing")?;
