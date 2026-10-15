@@ -2,8 +2,7 @@ name: Build Windows
 
 on:
   push:
-    branches: [main]
-    tags: ["v*"]
+    tags: ["v*"]   # build runs ONLY on version tags (no per-push builds)
   workflow_dispatch:
 
 permissions:
