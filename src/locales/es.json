@@ -1,0 +1,228 @@
+{
+  "app": {
+    "name": "Authio",
+    "tagline": "Tus códigos, tu dispositivo. Sin conexión. Cifrado. Código abierto."
+  },
+  "setup": {
+    "title": "Configura tu bóveda",
+    "intro": "Todos tus secretos se cifran con AES-256-GCM y nunca salen de este dispositivo. Elige cómo se protege la clave de cifrado:",
+    "password": "Contraseña maestra (mín. 8 caracteres)",
+    "confirm": "Confirmar contraseña maestra",
+    "mismatch": "Las contraseñas no coinciden",
+    "create": "Crear bóveda",
+    "creating": "Derivando clave…",
+    "mode": {
+      "password": "Contraseña maestra",
+      "keychain": "Inicio de sesión de Windows (llavero del SO)",
+      "none": "Sin seguridad"
+    }
+  },
+  "lock": {
+    "title": "Bienvenido de nuevo",
+    "password": "Contraseña maestra",
+    "unlock": "Desbloquear",
+    "auto": "Bloqueado automáticamente por tu seguridad.",
+    "subtitle": {
+      "password": "Introduce tu contraseña maestra para desbloquear tus códigos.",
+      "keychain": "Tu bóveda se desbloquea con tu sesión de Windows.",
+      "none": "Esta bóveda no tiene protección por contraseña."
+    }
+  },
+  "main": {
+    "search": "Buscar cuentas…",
+    "add": "Añadir cuenta",
+    "import": "Importar",
+    "export": "Exportar",
+    "settings": "Ajustes",
+    "lock": "Bloquear ahora",
+    "showall": "Mostrar todos los códigos",
+    "hideall": "Ocultar todos los códigos",
+    "view": "Cambiar vista",
+    "grouped": "Agrupar cuentas",
+    "filter_group": "Filtrar por grupo",
+    "pinned": "Fijadas",
+    "accounts": "Cuentas",
+    "none": "Ninguna cuenta coincide con tu búsqueda.",
+    "empty": {
+      "title": "Aún no hay cuentas",
+      "hint": "Añade una manualmente, escanea una imagen QR o importa desde Google Authenticator, Aegis o Authme."
+    }
+  },
+  "code": {
+    "reveal": "Mostrar código",
+    "hide": "Ocultar código",
+    "copy": "Copiar código",
+    "copied": "¡Copiado!",
+    "next": "Siguiente código",
+    "hotp": {
+      "hint": "Basado en contador — toca para el siguiente código"
+    }
+  },
+  "card": {
+    "edit": "Editar",
+    "pin": "Fijar",
+    "unpin": "Soltar",
+    "delete": "Eliminar",
+    "secret": "Mostrar secreto",
+    "menu": "Más acciones"
+  },
+  "group": {
+    "all": "Todas",
+    "ungrouped": "Sin grupo",
+    "label": "Grupo",
+    "placeholder": "Opcional — p. ej. Trabajo"
+  },
+  "delete": {
+    "title": "¿Eliminar cuenta?",
+    "msg": "«{issuer} / {name}» se eliminará permanentemente. Asegúrate de tener otra forma de iniciar sesión.",
+    "confirm": "Eliminar"
+  },
+  "add": {
+    "title": "Añadir cuenta",
+    "qr": {
+      "choose": "Elegir imagen…",
+      "hint": "Selecciona una captura o foto de un código QR (PNG o JPEG). Se admiten los QR de exportación de Google Authenticator."
+    },
+    "uri": {
+      "label": "Pega un enlace otpauth://",
+      "hint": "Suele empezar por otpauth://totp/…",
+      "submit": "Añadir desde enlace"
+    },
+    "tab": {
+      "qr": "Imagen QR",
+      "uri": "Enlace otpauth://",
+      "manual": "Entrada manual"
+    },
+    "manual": {
+      "type": "Tipo",
+      "issuer": "Servicio (emisor)",
+      "name": "Nombre de la cuenta",
+      "secret": "Clave secreta (Base32)",
+      "counter": "Contador inicial",
+      "algorithm": "Algoritmo",
+      "digits": "Dígitos",
+      "period": "Periodo (segundos)",
+      "submit": "Añadir cuenta",
+      "hint": "El secreto es la cadena Base32 que aparece junto al código QR al activar el 2FA.",
+      "issuer.ph": "p. ej. GitHub",
+      "name.ph": "p. ej. alice@example.com",
+      "secret.ph": "JBSW Y3DP EHPK 3PXP…"
+    }
+  },
+  "import": {
+    "title": "Importar cuentas",
+    "tab": {
+      "file": "Desde archivo",
+      "text": "Pegar texto"
+    },
+    "file": {
+      "choose": "Elegir archivo de copia…",
+      "hint": "Se admiten copias de Authio, Aegis, Authme, 2FAS, andOTP, Raivo, exportaciones de Bitwarden, .maFiles de Steam y listas otpauth."
+    },
+    "text": {
+      "label": "Pega el contenido de la copia o enlaces otpauth://",
+      "submit": "Continuar"
+    },
+    "password": {
+      "title": "Esta copia está cifrada",
+      "hint": "Introduce la contraseña que protege este archivo.",
+      "submit": "Descifrar"
+    },
+    "preview": {
+      "title": "Revisar importación",
+      "format": "Formato detectado",
+      "skipped": "{n} entrada(s) mal formada(s) omitida(s)",
+      "dupe": "duplicado",
+      "none": "No se encontraron cuentas.",
+      "submit": "Importar selección ({n})",
+      "selectall": "Seleccionar todo"
+    }
+  },
+  "export": {
+    "title": "Exportar copia",
+    "mode": "Protección",
+    "encrypted": "Cifrada (recomendado)",
+    "plain": "JSON sin cifrar",
+    "password": "Contraseña de la copia (mín. 8)",
+    "password2": "Repite la contraseña",
+    "mismatch": "Las contraseñas no coinciden",
+    "master": "Contraseña maestra (reautenticación)",
+    "submit": "Elegir ubicación y exportar",
+    "empty": "Aún no hay cuentas para exportar.",
+    "encrypted.desc": "Protegida con su propia contraseña (Argon2id + AES-256-GCM).",
+    "plain.desc": "Legible por cualquiera. Usa solo para migrar a otra app de confianza.",
+    "plain.warn": "Este archivo contendrá TODOS tus secretos en texto plano.",
+    "plain.ack": "Entiendo el riesgo"
+  },
+  "settings": {
+    "title": "Ajustes",
+    "language": "Idioma",
+    "language.hint": "Se aplica al instante — se conserva al reiniciar",
+    "theme": "Tema",
+    "density": "Densidad",
+    "font": "Tamaño del código",
+    "view": "Estilo de vista",
+    "sort_alpha": "Ordenar alfabéticamente (desactiva arrastrar y soltar)",
+    "hide_codes": "Ocultar códigos hasta mostrarlos",
+    "autolock": "Bloqueo automático por inactividad",
+    "lock_minimize": "Bloquear al minimizar la ventana",
+    "tray": "Ejecutar en la bandeja del sistema (cerrar minimiza en vez de salir)",
+    "security": "Seguridad",
+    "data": "Datos",
+    "unlock_method": "Método de desbloqueo",
+    "timer_number": "Mostrar la cuenta atrás dentro del anillo",
+    "change": "Cambiar…",
+    "about": "Authio {v} — libre y de código abierto (MIT). Totalmente sin conexión: sin internet, sin telemetría, sin cuentas. Tus secretos nunca salen de este dispositivo.",
+    "saved": "Ajustes guardados",
+    "theme.system": "Sistema",
+    "theme.light": "Claro",
+    "theme.dark": "Oscuro",
+    "density.compact": "Compacta",
+    "density.comfortable": "Cómoda",
+    "view.rows": "Filas",
+    "view.tiles": "Mosaicos",
+    "autolock.minutes": "minutos",
+    "autolock.off": "minutos (0 = desactivado)",
+    "mode.password": "Contraseña maestra",
+    "mode.keychain": "Inicio de sesión de Windows",
+    "mode.none": "Sin seguridad"
+  },
+  "about": {
+    "title": "Acerca de",
+    "github": "GitHub — código, incidencias y versiones",
+    "donate": "Donar — apoya el desarrollo"
+  },
+  "chg": {
+    "title": "Cambiar método de desbloqueo",
+    "current": "Contraseña maestra actual",
+    "newmode": "Nuevo método",
+    "mismatch": "Las contraseñas no coinciden",
+    "submit": "Aplicar",
+    "done": "Método de desbloqueo actualizado",
+    "new_password": "Nueva contraseña maestra (mín. 8)",
+    "new_password2": "Repite la nueva contraseña",
+    "none.warn": "Aviso: cualquier persona con acceso a este dispositivo podrá leer todos tus secretos; capturas y exportaciones sin protección."
+  },
+  "reveal": {
+    "title": "Mostrar secreto",
+    "master": "Contraseña maestra (necesaria para mostrar secretos)",
+    "submit": "Mostrar",
+    "secret": "Secreto (Base32)",
+    "uri": "Enlace otpauth://",
+    "hint": "No lo compartas nunca con nadie."
+  },
+  "common": {
+    "cancel": "Cancelar",
+    "close": "Cerrar",
+    "back": "Atrás",
+    "ok": "OK",
+    "save": "Guardar",
+    "error": "Algo salió mal"
+  },
+  "toast": {
+    "added": "Cuenta añadida",
+    "imported": "{n} cuenta(s) importada(s)",
+    "deleted": "Cuenta eliminada",
+    "updated": "Cuenta actualizada"
+  }
+}

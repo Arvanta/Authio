@@ -42,6 +42,7 @@
 
 ### UI
 - **Fluent 2** design language: compact list, Segoe UI Variable, 8 px radii, light/dark/system themes.
+- **9 UI languages** — English, Deutsch, Español, Français, 日本語, 한국어, Português, Русский, 简体中文 (switch live in Settings).
 - Density toggle (compact/comfortable), code font-size slider, window size & position restored on launch.
 - Keyboard shortcuts: `Ctrl+F` search · `Enter` reveal/copy · `Ctrl+L` lock · `Ctrl+,` settings.
 

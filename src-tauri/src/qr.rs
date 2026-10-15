@@ -1,8 +1,15 @@
 //! Local QR decoding from image files (PNG/JPEG) — no camera, no network.
 
 pub fn decode_qr_from_file(path: &str) -> Result<String, String> {
-    let img = image::open(path)
+    // Sniff the format from magic bytes *before* falling back to the file
+    // extension — screenshots saved with a mismatched .png/.jpg extension
+    // must still decode (fixes "invalid png signature" on such files).
+    let img = image::ImageReader::open(path)
         .map_err(|e| format!("cannot open image: {e}"))?
+        .with_guessed_format()
+        .map_err(|e| format!("cannot identify image format: {e}"))?
+        .decode()
+        .map_err(|e| format!("cannot decode image: {e}"))?
         .to_luma8();
     let mut prepared = rqrr::PreparedImage::prepare(img);
     let grids = prepared.detect_grids();

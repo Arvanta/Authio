@@ -52,6 +52,8 @@ pub struct StatusDto {
     pub initialized: bool,
     pub unlocked: bool,
     pub mode: Option<String>,
+    /// Compile-time app version (Cargo.toml) — single source of truth.
+    pub version: String,
 }
 
 #[derive(Serialize)]
@@ -78,6 +80,28 @@ pub struct PreviewDto {
 pub struct SecretDto {
     pub secret: String,
     pub uri: String,
+}
+
+/// Open a fixed external link in the user's default browser.
+/// URLs are hardcoded allowlist constants — the frontend only passes a target
+/// name, so no arbitrary URL can ever be opened from the webview.
+#[tauri::command]
+pub fn open_url(target: &str) -> Result<(), String> {
+    const GITHUB_URL: &str = "https://github.com/Arvanta/Authio";
+    const DONATE_URL: &str = "https://arvanta.github.io";
+    let url = match target {
+        "github" => GITHUB_URL,
+        "donate" => DONATE_URL,
+        other => return Err(format!("unknown link target \"{other}\"")),
+    };
+    #[cfg(target_os = "windows")]
+    let spawned = std::process::Command::new("cmd").args(["/C", "start", "", url]).spawn();
+    #[cfg(target_os = "macos")]
+    let spawned = std::process::Command::new("open").arg(url).spawn();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let spawned = std::process::Command::new("xdg-open").arg(url).spawn();
+    spawned.map_err(|e| format!("cannot open the browser: {e}"))?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -226,6 +250,8 @@ pub fn vault_status(state: State<'_, Arc<AppState>>) -> StatusDto {
         initialized,
         unlocked: state.is_unlocked(),
         mode,
+        // Compile-time version with a fallback so parse-level tooling also compiles.
+        version: option_env!("CARGO_PKG_VERSION").unwrap_or("1.0.0").to_string(),
     }
 }
 
@@ -649,7 +675,7 @@ fn do_import(state: &AppState, text: &str, password: Option<&str>) -> Cmd<Previe
             .collect::<Vec<_>>())
     })?;
     let mut guard = state.pending.lock().map_err(|_| "internal error (state lock)".to_string())?;
-    *guard = Some(PendingImport { format: outcome.format.clone(), drafts: outcome.drafts });
+    *guard = Some(PendingImport { drafts: outcome.drafts });
     Ok(PreviewDto { format: outcome.format, needs_password: false, skipped: outcome.skipped, entries })
 }
 

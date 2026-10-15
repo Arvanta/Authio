@@ -220,6 +220,8 @@ pub struct Settings {
     pub grouped_view: bool,
     #[serde(default = "default_true")]
     pub tray: bool,
+    #[serde(default = "default_lang")]
+    pub lang: String, // UI language — "en" | "de" | "es" | "fr" | "ja" | "ko" | "pt" | "ru" | "zh-CN"
     #[serde(default)]
     pub window: Option<WindowGeo>,
 }
@@ -228,6 +230,9 @@ fn default_view_mode() -> String {
     "rows".into()
 }
 
+fn default_lang() -> String {
+    "en".into()
+}
 fn default_theme() -> String {
     "system".into()
 }
@@ -258,6 +263,7 @@ impl Default for Settings {
             show_timer_number: true,
             grouped_view: false,
             tray: true,
+            lang: default_lang(),
             window: None,
         }
     }

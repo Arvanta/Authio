@@ -1,0 +1,228 @@
+{
+  "app": {
+    "name": "Authio",
+    "tagline": "Vos codes, votre appareil. Hors ligne. Chiffré. Libre."
+  },
+  "setup": {
+    "title": "Configurer votre coffre",
+    "intro": "Tous vos secrets sont chiffrés en AES-256-GCM et ne quittent jamais cet appareil. Choisissez comment la clé de chiffrement est protégée :",
+    "password": "Mot de passe maître (8 caractères min.)",
+    "confirm": "Confirmer le mot de passe maître",
+    "mismatch": "Les mots de passe ne correspondent pas",
+    "create": "Créer le coffre",
+    "creating": "Dérivation de la clé…",
+    "mode": {
+      "password": "Mot de passe maître",
+      "keychain": "Session Windows (trousseau OS)",
+      "none": "Aucune sécurité"
+    }
+  },
+  "lock": {
+    "title": "Bon retour",
+    "password": "Mot de passe maître",
+    "unlock": "Déverrouiller",
+    "auto": "Verrouillé automatiquement pour votre sécurité.",
+    "subtitle": {
+      "password": "Saisissez votre mot de passe maître pour déverrouiller vos codes.",
+      "keychain": "Votre coffre se déverrouille avec votre session Windows.",
+      "none": "Ce coffre n'est protégé par aucun mot de passe."
+    }
+  },
+  "main": {
+    "search": "Rechercher des comptes…",
+    "add": "Ajouter un compte",
+    "import": "Importer",
+    "export": "Exporter",
+    "settings": "Paramètres",
+    "lock": "Verrouiller",
+    "showall": "Afficher tous les codes",
+    "hideall": "Masquer tous les codes",
+    "view": "Changer de vue",
+    "grouped": "Regrouper les comptes",
+    "filter_group": "Filtrer par groupe",
+    "pinned": "Épinglés",
+    "accounts": "Comptes",
+    "none": "Aucun compte ne correspond à votre recherche.",
+    "empty": {
+      "title": "Aucun compte pour l'instant",
+      "hint": "Ajoutez-en un manuellement, scannez une image QR ou importez depuis Google Authenticator, Aegis ou Authme."
+    }
+  },
+  "code": {
+    "reveal": "Afficher le code",
+    "hide": "Masquer le code",
+    "copy": "Copier le code",
+    "copied": "Copié !",
+    "next": "Code suivant",
+    "hotp": {
+      "hint": "Basé sur un compteur — touchez pour le code suivant"
+    }
+  },
+  "card": {
+    "edit": "Modifier",
+    "pin": "Épingler",
+    "unpin": "Détacher",
+    "delete": "Supprimer",
+    "secret": "Afficher le secret",
+    "menu": "Plus d'actions"
+  },
+  "group": {
+    "all": "Tous",
+    "ungrouped": "Sans groupe",
+    "label": "Groupe",
+    "placeholder": "Facultatif — p. ex. Travail"
+  },
+  "delete": {
+    "title": "Supprimer le compte ?",
+    "msg": "« {issuer} / {name} » sera définitivement supprimé. Assurez-vous d'avoir un autre moyen de vous connecter.",
+    "confirm": "Supprimer"
+  },
+  "add": {
+    "title": "Ajouter un compte",
+    "qr": {
+      "choose": "Choisir une image…",
+      "hint": "Sélectionnez une capture d'écran ou une photo d'un code QR (PNG ou JPEG). Les QR d'export de Google Authenticator sont pris en charge."
+    },
+    "uri": {
+      "label": "Coller un lien otpauth://",
+      "hint": "Commence généralement par otpauth://totp/…",
+      "submit": "Ajouter depuis le lien"
+    },
+    "tab": {
+      "qr": "Image QR",
+      "uri": "Lien otpauth://",
+      "manual": "Saisie manuelle"
+    },
+    "manual": {
+      "type": "Type",
+      "issuer": "Service (émetteur)",
+      "name": "Nom du compte",
+      "secret": "Clé secrète (Base32)",
+      "counter": "Compteur initial",
+      "algorithm": "Algorithme",
+      "digits": "Chiffres",
+      "period": "Période (secondes)",
+      "submit": "Ajouter le compte",
+      "hint": "Le secret est la chaîne Base32 affichée près du code QR lors de l'activation du 2FA.",
+      "issuer.ph": "p. ex. GitHub",
+      "name.ph": "p. ex. alice@example.com",
+      "secret.ph": "JBSW Y3DP EHPK 3PXP…"
+    }
+  },
+  "import": {
+    "title": "Importer des comptes",
+    "tab": {
+      "file": "Depuis un fichier",
+      "text": "Coller du texte"
+    },
+    "file": {
+      "choose": "Choisir le fichier de sauvegarde…",
+      "hint": "Pris en charge : sauvegardes Authio, Aegis, Authme, 2FAS, andOTP, Raivo, exports Bitwarden, .maFiles Steam et listes otpauth."
+    },
+    "text": {
+      "label": "Coller le contenu de la sauvegarde ou des liens otpauth://",
+      "submit": "Continuer"
+    },
+    "password": {
+      "title": "Cette sauvegarde est chiffrée",
+      "hint": "Saisissez le mot de passe protégeant ce fichier de sauvegarde.",
+      "submit": "Déchiffrer"
+    },
+    "preview": {
+      "title": "Vérifier l'import",
+      "format": "Format détecté",
+      "skipped": "{n} entrée(s) mal formée(s) ignorée(s)",
+      "dupe": "doublon",
+      "none": "Aucun compte trouvé.",
+      "submit": "Importer la sélection ({n})",
+      "selectall": "Tout sélectionner"
+    }
+  },
+  "export": {
+    "title": "Exporter une sauvegarde",
+    "mode": "Protection",
+    "encrypted": "Chiffrée (recommandé)",
+    "plain": "JSON non chiffré",
+    "password": "Mot de passe de sauvegarde (8 min.)",
+    "password2": "Répéter le mot de passe",
+    "mismatch": "Les mots de passe ne correspondent pas",
+    "master": "Mot de passe maître (re-vérification)",
+    "submit": "Choisir l'emplacement & exporter",
+    "empty": "Aucun compte à exporter pour l'instant.",
+    "encrypted.desc": "Protégée par son propre mot de passe (Argon2id + AES-256-GCM).",
+    "plain.desc": "Lisible par quiconque. À n'utiliser que pour migrer vers une autre application de confiance.",
+    "plain.warn": "Ce fichier contiendra TOUS vos secrets en clair.",
+    "plain.ack": "Je comprends le risque"
+  },
+  "settings": {
+    "title": "Paramètres",
+    "language": "Langue",
+    "language.hint": "Appliqué immédiatement — conservé au redémarrage",
+    "theme": "Thème",
+    "density": "Densité",
+    "font": "Taille des codes",
+    "view": "Style d'affichage",
+    "sort_alpha": "Tri alphabétique (désactive le glisser-déposer)",
+    "hide_codes": "Masquer les codes jusqu'à affichage",
+    "autolock": "Verrouillage auto après inactivité",
+    "lock_minimize": "Verrouiller à la réduction de la fenêtre",
+    "tray": "Exécuter dans la zone de notification (la fermeture minimise au lieu de quitter)",
+    "security": "Sécurité",
+    "data": "Données",
+    "unlock_method": "Méthode de déverrouillage",
+    "timer_number": "Afficher le compte à rebours dans l'anneau",
+    "change": "Modifier…",
+    "about": "Authio {v} — libre et open source (MIT). Entièrement hors ligne : pas d'internet, pas de télémétrie, pas de comptes. Vos secrets ne quittent jamais cet appareil.",
+    "saved": "Paramètres enregistrés",
+    "theme.system": "Système",
+    "theme.light": "Clair",
+    "theme.dark": "Sombre",
+    "density.compact": "Compact",
+    "density.comfortable": "Confortable",
+    "view.rows": "Lignes",
+    "view.tiles": "Tuiles",
+    "autolock.minutes": "minutes",
+    "autolock.off": "minutes (0 = désactivé)",
+    "mode.password": "Mot de passe maître",
+    "mode.keychain": "Session Windows",
+    "mode.none": "Aucune sécurité"
+  },
+  "about": {
+    "title": "À propos",
+    "github": "GitHub — code source, tickets & versions",
+    "donate": "Faire un don — soutenir le projet"
+  },
+  "chg": {
+    "title": "Changer la méthode de déverrouillage",
+    "current": "Mot de passe maître actuel",
+    "newmode": "Nouvelle méthode",
+    "mismatch": "Les mots de passe ne correspondent pas",
+    "submit": "Appliquer",
+    "done": "Méthode de déverrouillage mise à jour",
+    "new_password": "Nouveau mot de passe maître (8 min.)",
+    "new_password2": "Répéter le nouveau mot de passe",
+    "none.warn": "Attention : toute personne ayant accès à cet appareil pourra lire tous vos secrets ; captures et exports non protégés."
+  },
+  "reveal": {
+    "title": "Afficher le secret",
+    "master": "Mot de passe maître (requis pour afficher les secrets)",
+    "submit": "Afficher",
+    "secret": "Secret (Base32)",
+    "uri": "Lien otpauth://",
+    "hint": "Ne le partagez jamais avec personne."
+  },
+  "common": {
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "back": "Retour",
+    "ok": "OK",
+    "save": "Enregistrer",
+    "error": "Une erreur est survenue"
+  },
+  "toast": {
+    "added": "Compte ajouté",
+    "imported": "{n} compte(s) importé(s)",
+    "deleted": "Compte supprimé",
+    "updated": "Compte mis à jour"
+  }
+}

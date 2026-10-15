@@ -1061,3 +1061,88 @@ body[data-density="comfortable"] .timercol .ring {
     transition: none !important;
   }
 }
+
+/* ==========================================================================
+   Theme robustness fixes (v1.0)
+   ========================================================================== */
+
+/* Native form controls (select popups, scrollbars, number spinners) follow
+   the active theme instead of always rendering light — a WebView2 quirk that
+   made dropdowns blinding-white in dark mode. */
+:root {
+  color-scheme: light;
+}
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* In light theme the overlay felt too milky on white panels; a touch more
+   depth keeps popups visually anchored. In dark it slightly deepens. */
+.overlay {
+  background: rgba(24, 24, 24, 0.32);
+}
+html[data-theme="dark"] .overlay {
+  background: rgba(0, 0, 0, 0.52);
+}
+
+/* Danger buttons: white text on the light red used in dark theme failed
+   contrast — switch to near-black text just for dark mode. */
+html[data-theme="dark"] .btn.danger {
+  color: #1b0d0d;
+}
+
+/* Dropdown option theming inside selects (inherits color-scheme). */
+select option {
+  background: var(--card);
+  color: var(--text);
+}
+
+/* Modal bodies: give the content column its own faintly separated surface so
+   the translucent flyout never fuses with underlying tiles (readability). */
+.modal .mbody {
+  background: transparent;
+}
+
+/* Focus visibility for keyboard users on icon buttons. */
+.iconbtn:focus-visible,
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- About card (settings footer) ---------- */
+.about-card {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 7px;
+}
+.about-card .a-name {
+  font-weight: 700;
+  font-size: 13.5px;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+.about-card .a-name .ver {
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.about-card .a-sub {
+  color: var(--faint);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.about-card .a-links {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+.about-card .a-links .btn {
+  flex: 1;
+  font-size: 12px;
+  padding: 6px 10px;
+}

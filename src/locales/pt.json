@@ -1,0 +1,228 @@
+{
+  "app": {
+    "name": "Authio",
+    "tagline": "Os seus códigos, o seu dispositivo. Offline. Cifrado. Código aberto."
+  },
+  "setup": {
+    "title": "Configurar o cofre",
+    "intro": "Todos os seus segredos são cifrados com AES-256-GCM e nunca saem deste dispositivo. Escolha como a chave de cifra é protegida:",
+    "password": "Palavra-passe mestra (mín. 8 caracteres)",
+    "confirm": "Confirmar palavra-passe mestra",
+    "mismatch": "As palavras-passe não coincidem",
+    "create": "Criar cofre",
+    "creating": "A derivar a chave…",
+    "mode": {
+      "password": "Palavra-passe mestra",
+      "keychain": "Início de sessão do Windows (cofre do SO)",
+      "none": "Sem segurança"
+    }
+  },
+  "lock": {
+    "title": "Bem-vindo de volta",
+    "password": "Palavra-passe mestra",
+    "unlock": "Desbloquear",
+    "auto": "Bloqueado automaticamente para sua segurança.",
+    "subtitle": {
+      "password": "Introduza a sua palavra-passe mestra para desbloquear os códigos.",
+      "keychain": "O seu cofre desbloqueia com a sua sessão do Windows.",
+      "none": "Este cofre não tem proteção por palavra-passe."
+    }
+  },
+  "main": {
+    "search": "Procurar contas…",
+    "add": "Adicionar conta",
+    "import": "Importar",
+    "export": "Exportar",
+    "settings": "Definições",
+    "lock": "Bloquear agora",
+    "showall": "Mostrar todos os códigos",
+    "hideall": "Ocultar todos os códigos",
+    "view": "Mudar de vista",
+    "grouped": "Agrupar contas",
+    "filter_group": "Filtrar por grupo",
+    "pinned": "Fixadas",
+    "accounts": "Contas",
+    "none": "Nenhuma conta corresponde à sua pesquisa.",
+    "empty": {
+      "title": "Ainda sem contas",
+      "hint": "Adicione uma manualmente, digitalize uma imagem QR ou importe do Google Authenticator, Aegis ou Authme."
+    }
+  },
+  "code": {
+    "reveal": "Mostrar código",
+    "hide": "Ocultar código",
+    "copy": "Copiar código",
+    "copied": "Copiado!",
+    "next": "Código seguinte",
+    "hotp": {
+      "hint": "Baseado em contador — toque para o código seguinte"
+    }
+  },
+  "card": {
+    "edit": "Editar",
+    "pin": "Fixar",
+    "unpin": "Soltar",
+    "delete": "Eliminar",
+    "secret": "Mostrar segredo",
+    "menu": "Mais ações"
+  },
+  "group": {
+    "all": "Todas",
+    "ungrouped": "Sem grupo",
+    "label": "Grupo",
+    "placeholder": "Opcional — p. ex. Trabalho"
+  },
+  "delete": {
+    "title": "Eliminar conta?",
+    "msg": "«{issuer} / {name}» será removido permanentemente. Certifique-se de que tem outra forma de iniciar sessão.",
+    "confirm": "Eliminar"
+  },
+  "add": {
+    "title": "Adicionar conta",
+    "qr": {
+      "choose": "Escolher imagem…",
+      "hint": "Selecione uma captura de ecrã ou foto de um código QR (PNG ou JPEG). Os QR de exportação do Google Authenticator são suportados."
+    },
+    "uri": {
+      "label": "Colar uma ligação otpauth://",
+      "hint": "Normalmente começa por otpauth://totp/…",
+      "submit": "Adicionar por ligação"
+    },
+    "tab": {
+      "qr": "Imagem QR",
+      "uri": "Ligação otpauth://",
+      "manual": "Entrada manual"
+    },
+    "manual": {
+      "type": "Tipo",
+      "issuer": "Serviço (emissor)",
+      "name": "Nome da conta",
+      "secret": "Chave secreta (Base32)",
+      "counter": "Contador inicial",
+      "algorithm": "Algoritmo",
+      "digits": "Dígitos",
+      "period": "Período (segundos)",
+      "submit": "Adicionar conta",
+      "hint": "O segredo é a cadeia Base32 mostrada junto ao código QR ao ativar o 2FA.",
+      "issuer.ph": "p. ex. GitHub",
+      "name.ph": "p. ex. alice@example.com",
+      "secret.ph": "JBSW Y3DP EHPK 3PXP…"
+    }
+  },
+  "import": {
+    "title": "Importar contas",
+    "tab": {
+      "file": "De ficheiro",
+      "text": "Colar texto"
+    },
+    "file": {
+      "choose": "Escolher ficheiro de cópia…",
+      "hint": "São suportadas cópias de Authio, Aegis, Authme, 2FAS, andOTP, Raivo, exportações do Bitwarden, .maFiles do Steam e listas otpauth."
+    },
+    "text": {
+      "label": "Cole o conteúdo da cópia ou ligações otpauth://",
+      "submit": "Continuar"
+    },
+    "password": {
+      "title": "Esta cópia está cifrada",
+      "hint": "Introduza a palavra-passe que protege este ficheiro.",
+      "submit": "Decifrar"
+    },
+    "preview": {
+      "title": "Rever importação",
+      "format": "Formato detetado",
+      "skipped": "{n} entrada(s) mal formada(s) ignorada(s)",
+      "dupe": "duplicado",
+      "none": "Nenhuma conta encontrada.",
+      "submit": "Importar seleção ({n})",
+      "selectall": "Selecionar tudo"
+    }
+  },
+  "export": {
+    "title": "Exportar cópia",
+    "mode": "Proteção",
+    "encrypted": "Cifrada (recomendado)",
+    "plain": "JSON sem cifra",
+    "password": "Palavra-passe da cópia (mín. 8)",
+    "password2": "Repetir palavra-passe",
+    "mismatch": "As palavras-passe não coincidem",
+    "master": "Palavra-passe mestra (reautenticação)",
+    "submit": "Escolher local e exportar",
+    "empty": "Ainda não há contas para exportar.",
+    "encrypted.desc": "Protegida com a sua própria palavra-passe (Argon2id + AES-256-GCM).",
+    "plain.desc": "Legível por qualquer pessoa. Use apenas para migrar para outra app de confiança.",
+    "plain.warn": "Este ficheiro conterá TODOS os seus segredos em texto simples.",
+    "plain.ack": "Compreendo o risco"
+  },
+  "settings": {
+    "title": "Definições",
+    "language": "Idioma",
+    "language.hint": "Aplica-se de imediato — mantido ao reiniciar",
+    "theme": "Tema",
+    "density": "Densidade",
+    "font": "Tamanho do código",
+    "view": "Estilo de vista",
+    "sort_alpha": "Ordenar alfabeticamente (desativa arrastar e largar)",
+    "hide_codes": "Ocultar códigos até os mostrar",
+    "autolock": "Bloqueio automático por inatividade",
+    "lock_minimize": "Bloquear ao minimizar a janela",
+    "tray": "Executar na bandeja do sistema (fechar minimiza em vez de sair)",
+    "security": "Segurança",
+    "data": "Dados",
+    "unlock_method": "Método de desbloqueio",
+    "timer_number": "Mostrar a contagem decrescente dentro do anel",
+    "change": "Alterar…",
+    "about": "Authio {v} — livre e de código aberto (MIT). Totalmente offline: sem internet, sem telemetria, sem contas. Os seus segredos nunca saem deste dispositivo.",
+    "saved": "Definições guardadas",
+    "theme.system": "Sistema",
+    "theme.light": "Claro",
+    "theme.dark": "Escuro",
+    "density.compact": "Compacta",
+    "density.comfortable": "Confortável",
+    "view.rows": "Linhas",
+    "view.tiles": "Mosaicos",
+    "autolock.minutes": "minutos",
+    "autolock.off": "minutos (0 = desligado)",
+    "mode.password": "Palavra-passe mestra",
+    "mode.keychain": "Início de sessão do Windows",
+    "mode.none": "Sem segurança"
+  },
+  "about": {
+    "title": "Sobre",
+    "github": "GitHub — código, problemas e versões",
+    "donate": "Doar — apoiar o desenvolvimento"
+  },
+  "chg": {
+    "title": "Alterar método de desbloqueio",
+    "current": "Palavra-passe mestra atual",
+    "newmode": "Novo método",
+    "mismatch": "As palavras-passe não coincidem",
+    "submit": "Aplicar",
+    "done": "Método de desbloqueio atualizado",
+    "new_password": "Nova palavra-passe mestra (mín. 8)",
+    "new_password2": "Repetir a nova palavra-passe",
+    "none.warn": "Atenção: qualquer pessoa com acesso a este dispositivo poderá ler todos os seus segredos; capturas e exportações ficam desprotegidas."
+  },
+  "reveal": {
+    "title": "Mostrar segredo",
+    "master": "Palavra-passe mestra (necessária para mostrar segredos)",
+    "submit": "Mostrar",
+    "secret": "Segredo (Base32)",
+    "uri": "Ligação otpauth://",
+    "hint": "Nunca partilhe isto com ninguém."
+  },
+  "common": {
+    "cancel": "Cancelar",
+    "close": "Fechar",
+    "back": "Voltar",
+    "ok": "OK",
+    "save": "Guardar",
+    "error": "Algo correu mal"
+  },
+  "toast": {
+    "added": "Conta adicionada",
+    "imported": "{n} conta(s) importada(s)",
+    "deleted": "Conta eliminada",
+    "updated": "Conta atualizada"
+  }
+}

@@ -1,7 +1,7 @@
 # Authio — Feature Specification
 
 > A lightweight, fast, secure, and open-source 2FA Authenticator built with **Rust + Tauri + TypeScript**.
-> Language: English (i18n-ready). Platform: Windows (NSIS installer `.exe` + portable `.zip`).
+> Languages: English, German, Spanish, French, Japanese, Korean, Portuguese, Russian, Simplified Chinese (live switchable in Settings; Persian + RTL planned). Platform: Windows (NSIS installer `.exe` + portable `.zip`).
 > Source: <https://github.com/Arvanta/Authio> — Licensed under MIT.
 
 This document is the single source of truth for Authio's scope. Features are organized into three tiers: **MVP (v1.0)**, **Complementary (v1.x)**, and **Advanced (v2+)**.
@@ -116,7 +116,7 @@ This document is the single source of truth for Authio's scope. Features are org
 - **Window geometry persistence**: size + position restored on next launch (inner size is saved so the window never drifts larger; clamped to visible desktop bounds).
 - Minimal empty space, no decorative clutter; empty state explains the three ways to add an account.
 - Keyboard-friendly: `Ctrl+F` search, `Ctrl+L` lock, `Ctrl+,` settings.
-- **Language: English in v1.0** with an i18n-ready architecture — every string lives in `locales/en.json`, so future translations are additive (a single JSON file per language, no framework, system fonts only).
+- **Languages in v1.0**: English, German, Spanish, French, Japanese, Korean, Portuguese, Russian and Simplified Chinese — each lives in `locales/<code>.json` mirroring `en.json`'s key structure (fallback: English, then the raw key). Choice persists in the vault settings and applies instantly. Persian + full RTL is the first post-1.0 language (CSS logical properties, mirrored icons).
 
 ### v1.0 status
 
@@ -142,7 +142,7 @@ Windows Hello → Camera scan
 
 ## Tier 3 — Advanced (v2+)
 
-- **i18n releases** — first **Persian (Farsi) with complete RTL layout** (CSS logical properties, mirrored icons), then **German, Spanish, Simplified Chinese**; then French, Brazilian Portuguese, Russian, Japanese, Korean. All LTR; system fonts only, no font bundling.
+- **i18n releases** — ~~German, Spanish, Simplified Chinese, French, Portuguese, Russian, Japanese, Korean~~ ✅ shipped in v1.0. Next: **Persian (Farsi) with complete RTL layout** (CSS logical properties, mirrored icons); then community languages. All LTR; system fonts only, no font bundling.
 - **Local-first encrypted sync** via a user-owned folder (WebDAV / LAN / portable drive) with merge semantics (per-account timestamps + deletion tombstones) — still no first-party servers.
 - **Hardening extras**: configurable Argon2id parameters (preset levels) and login-attempt throttling (progressive backoff).
 - **Importer plugin API (WASM)** for community formats — sandboxed, with a documented ABI.

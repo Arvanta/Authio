@@ -6,7 +6,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { AccountDto, CodeDto, PreviewDto, Settings, StatusDto, UnlockMode, api } from "./api";
-import { t } from "./i18n";
+import { t, setLang, getBootLang, LANGS } from "./i18n";
 import "./styles.css";
 
 /* ------------------------------------------------------------------ icons */
@@ -40,6 +40,10 @@ const ICONS = {
   grid: '<rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/>',
   kebab: '<circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none"/>',
   layers: '<path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/>',
+  linkExt:
+    '<path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M20 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5"/>',
+  heart:
+    '<path d="M12 20.3C7 16.8 3.5 13.6 3.5 9.9A4.6 4.6 0 0 1 8 5.3c1.7 0 3.2.8 4 2.2a4.9 4.9 0 0 1 4-2.2 4.6 4.6 0 0 1 4.5 4.6c0 3.7-3.5 6.9-8.5 10.4Z"/>',
 } as const;
 type IconName = keyof typeof ICONS;
 
@@ -182,6 +186,7 @@ let settings: Settings = {
   hide_codes: true,
   auto_lock_minutes: 5,
   lock_on_minimize: true,
+  lang: "en",
   view_mode: "rows",
   show_timer_number: true,
   grouped_view: false,
@@ -1464,6 +1469,16 @@ async function openSettingsModal() {
     return row;
   };
 
+  // language — stored in the vault settings, applied live via full re-paint
+  const langSel = el("select") as HTMLSelectElement;
+  LANGS.forEach((l) => langSel.append(new Option(l.name, l.code)));
+  langSel.value = settings.lang in Object.fromEntries(LANGS.map((l) => [l.code, true])) ? settings.lang : "en";
+  langSel.onchange = () => {
+    settings.lang = langSel.value;
+    setLang(langSel.value);
+    void save().then(() => location.reload()); // re-render every string in the new language
+  };
+
   // theme
   const themeSel = el("select") as HTMLSelectElement;
   themeSel.append(
@@ -1611,7 +1626,25 @@ async function openSettingsModal() {
   modeWrap.style.cssText = "display:flex;align-items:center";
   modeWrap.append(modeLabel, chgB);
 
+  // ---- about
+  const aboutTitle = el("div", "section-label", t("about.title"));
+  aboutTitle.style.margin = "10px 0 0";
+  const ver = statusInfo?.version ?? "1.0.0";
+  const aboutCard = el("div", "about-card");
+  const aName = el("div", "a-name");
+  aName.append(el("span", "", t("app.name")), el("span", "ver", `v${ver}`));
+  const ghB = el("button", "btn", t("about.github"));
+  ghB.prepend(icon("linkExt"));
+  ghB.onclick = () => void api.openUrl("github").catch((e) => toast(fmtError(e), true));
+  const donB = el("button", "btn", t("about.donate"));
+  donB.prepend(icon("heart"));
+  donB.onclick = () => void api.openUrl("donate").catch((e) => toast(fmtError(e), true));
+  const aLinks = el("div", "a-links");
+  aLinks.append(ghB, donB);
+  aboutCard.append(aName, el("div", "a-sub", t("settings.about", { v: ver })), aLinks);
+
   h.body.append(
+    mkRow(t("settings.language"), t("settings.language.hint"), langSel),
     mkRow(t("settings.theme"), null, themeSel),
     mkRow(t("settings.density"), null, densSel),
     mkRow(t("settings.font"), null, fontRange),
@@ -1626,7 +1659,8 @@ async function openSettingsModal() {
     dataActions,
     secTitle,
     mkRow(t("settings.unlock_method"), null, modeWrap),
-    el("div", "about", t("settings.about", { v: "0.1.0" })),
+    aboutTitle,
+    aboutCard,
   );
 
   const done = el("button", "btn primary", t("common.close"));
@@ -1839,9 +1873,11 @@ function openRevealModal(a: AccountDto) {
 
 /* --------------------------------------------------------------------- boot */
 async function boot() {
+  setLang(getBootLang()); // setup/lock screens paint before the vault settings are known
   applyVisualSettings();
   try {
     settings = { ...settings, ...(await api.getSettings()) };
+    setLang(settings.lang || getBootLang()); // vault settings win over the boot mirror
   } catch {
     /* defaults */
   }

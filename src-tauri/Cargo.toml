@@ -1,6 +1,6 @@
 [package]
 name = "authio"
-version = "0.1.0"
+version = "1.0.0"
 description = "Authio — tiny, fast, secure open-source 2FA authenticator"
 authors = ["Arvanta"]
 license = "MIT"

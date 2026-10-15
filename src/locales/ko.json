@@ -1,0 +1,228 @@
+{
+  "app": {
+    "name": "Authio",
+    "tagline": "당신의 코드는 당신의 기기에. 오프라인. 암호화. 오픈 소스."
+  },
+  "setup": {
+    "title": "금고 설정",
+    "intro": "모든 비밀 키는 AES-256-GCM으로 암호화되며 이 기기를 벗어나지 않습니다. 암호화 키를 보호할 방법을 선택하세요:",
+    "password": "마스터 비밀번호 (최소 8자)",
+    "confirm": "마스터 비밀번호 확인",
+    "mismatch": "비밀번호가 일치하지 않습니다",
+    "create": "금고 만들기",
+    "creating": "키를 생성하는 중…",
+    "mode": {
+      "password": "마스터 비밀번호",
+      "keychain": "Windows 로그인 (OS 키체인)",
+      "none": "보안 없음"
+    }
+  },
+  "lock": {
+    "title": "다시 오신 것을 환영합니다",
+    "password": "마스터 비밀번호",
+    "unlock": "잠금 해제",
+    "auto": "보안을 위해 자동으로 잠겼습니다.",
+    "subtitle": {
+      "password": "코드 잠금을 해제하려면 마스터 비밀번호를 입력하세요.",
+      "keychain": "금고는 Windows 세션과 함께 잠금 해제됩니다.",
+      "none": "이 금고는 비밀번호로 보호되지 않습니다."
+    }
+  },
+  "main": {
+    "search": "계정 검색…",
+    "add": "계정 추가",
+    "import": "가져오기",
+    "export": "내보내기",
+    "settings": "설정",
+    "lock": "지금 잠금",
+    "showall": "모든 코드 보기",
+    "hideall": "모든 코드 숨기기",
+    "view": "보기 전환",
+    "grouped": "계정을 그룹으로 묶기",
+    "filter_group": "그룹으로 필터",
+    "pinned": "고정됨",
+    "accounts": "계정",
+    "none": "검색과 일치하는 계정이 없습니다.",
+    "empty": {
+      "title": "아직 계정이 없습니다",
+      "hint": "수동으로 추가하거나 QR 이미지를 스캔하거나 Google Authenticator, Aegis, Authme에서 가져오세요."
+    }
+  },
+  "code": {
+    "reveal": "코드 보기",
+    "hide": "코드 숨기기",
+    "copy": "코드 복사",
+    "copied": "복사됨!",
+    "next": "다음 코드",
+    "hotp": {
+      "hint": "카운터 방식 — 탭하면 다음 코드"
+    }
+  },
+  "card": {
+    "edit": "편집",
+    "pin": "고정",
+    "unpin": "고정 해제",
+    "delete": "삭제",
+    "secret": "비밀 키 보기",
+    "menu": "더 많은 작업"
+  },
+  "group": {
+    "all": "전체",
+    "ungrouped": "그룹 없음",
+    "label": "그룹",
+    "placeholder": "선택 사항 — 예: 직장"
+  },
+  "delete": {
+    "title": "계정을 삭제할까요?",
+    "msg": "“{issuer} / {name}”이(가) 영구적으로 삭제됩니다. 다른 로그인 방법이 있는지 확인하세요.",
+    "confirm": "삭제"
+  },
+  "add": {
+    "title": "계정 추가",
+    "qr": {
+      "choose": "이미지 선택…",
+      "hint": "QR 코드 스크린샷이나 사진을 선택하세요 (PNG 또는 JPEG). Google Authenticator 내보내기 QR도 지원됩니다."
+    },
+    "uri": {
+      "label": "otpauth:// 링크 붙여넣기",
+      "hint": "보통 otpauth://totp/…로 시작합니다",
+      "submit": "링크로 추가"
+    },
+    "tab": {
+      "qr": "QR 이미지",
+      "uri": "otpauth:// 링크",
+      "manual": "수동 입력"
+    },
+    "manual": {
+      "type": "유형",
+      "issuer": "서비스 (발급자)",
+      "name": "계정 이름",
+      "secret": "비밀 키 (Base32)",
+      "counter": "초기 카운터",
+      "algorithm": "알고리즘",
+      "digits": "자릿수",
+      "period": "주기 (초)",
+      "submit": "계정 추가",
+      "hint": "비밀 키는 2FA를 설정할 때 QR 코드 옆에 표시되는 Base32 문자열입니다.",
+      "issuer.ph": "예: GitHub",
+      "name.ph": "예: alice@example.com",
+      "secret.ph": "JBSW Y3DP EHPK 3PXP…"
+    }
+  },
+  "import": {
+    "title": "계정 가져오기",
+    "tab": {
+      "file": "파일에서",
+      "text": "텍스트 붙여넣기"
+    },
+    "file": {
+      "choose": "백업 파일 선택…",
+      "hint": "Authio 백업, Aegis, Authme, 2FAS, andOTP, Raivo, Bitwarden 내보내기, Steam .maFile, otpauth 텍스트 목록을 지원합니다."
+    },
+    "text": {
+      "label": "백업 내용 또는 otpauth:// 링크 붙여넣기",
+      "submit": "계속"
+    },
+    "password": {
+      "title": "이 백업은 암호화되어 있습니다",
+      "hint": "이 백업 파일을 보호하는 비밀번호를 입력하세요.",
+      "submit": "복호화"
+    },
+    "preview": {
+      "title": "가져오기 검토",
+      "format": "감지된 형식",
+      "skipped": "잘못된 항목 {n}개 제외됨",
+      "dupe": "중복",
+      "none": "계정을 찾을 수 없습니다.",
+      "submit": "선택 항목 가져오기 ({n})",
+      "selectall": "모두 선택"
+    }
+  },
+  "export": {
+    "title": "백업 내보내기",
+    "mode": "보호",
+    "encrypted": "암호화 (권장)",
+    "plain": "암호화하지 않은 JSON",
+    "password": "백업 비밀번호 (최소 8자)",
+    "password2": "비밀번호 다시 입력",
+    "mismatch": "비밀번호가 일치하지 않습니다",
+    "master": "마스터 비밀번호 (재인증)",
+    "submit": "위치 선택 후 내보내기",
+    "empty": "내볼 계정이 아직 없습니다.",
+    "encrypted.desc": "자체 비밀번호(Argon2id + AES-256-GCM)로 보호됩니다.",
+    "plain.desc": "누구나 읽을 수 있습니다. 신뢰할 수 있는 다른 앱으로의 이동에만 사용하세요.",
+    "plain.warn": "이 파일에는 모든 비밀 키가 일반 텍스트로 들어갑니다.",
+    "plain.ack": "위험을 이해했습니다"
+  },
+  "settings": {
+    "title": "설정",
+    "language": "언어",
+    "language.hint": "즉시 적용 — 재시작해에도 유지됩니다",
+    "theme": "테마",
+    "density": "표시 밀도",
+    "font": "코드 크기",
+    "view": "보기 스타일",
+    "sort_alpha": "알파벳순으로 정렬 (끌어 놓기 비활성화)",
+    "hide_codes": "표시할 때까지 코드 숨기기",
+    "autolock": "비활동 시 자동 잠금",
+    "lock_minimize": "창을 최소화하면 잠금",
+    "tray": "시스템 트레이에서 실행 (닫기 시 종료 대신 트레이로 최소화)",
+    "security": "보안",
+    "data": "데이터",
+    "unlock_method": "잠금 해제 방법",
+    "timer_number": "타이머 링 안에 남은 시간 숫자 표시",
+    "change": "변경…",
+    "about": "Authio {v} — 자유 오픈 소스(MIT). 완전 오프라인: 인터넷 없음, 텔레메트리 없음, 계정 없음. 비밀 키는 이 기기를 절대 떠나지 않습니다.",
+    "saved": "설정이 저장되었습니다",
+    "theme.system": "시스템",
+    "theme.light": "밝게",
+    "theme.dark": "어둡게",
+    "density.compact": "콤팩트",
+    "density.comfortable": "편안하게",
+    "view.rows": "행",
+    "view.tiles": "타일",
+    "autolock.minutes": "분",
+    "autolock.off": "분 (0 = 해제)",
+    "mode.password": "마스터 비밀번호",
+    "mode.keychain": "Windows 로그인",
+    "mode.none": "보안 없음"
+  },
+  "about": {
+    "title": "정보",
+    "github": "GitHub — 소스, 이슈, 릴리스",
+    "donate": "후원하기 — 개발 지원"
+  },
+  "chg": {
+    "title": "잠금 해제 방법 변경",
+    "current": "현재 마스터 비밀번호",
+    "newmode": "새 방법",
+    "mismatch": "비밀번호가 일치하지 않습니다",
+    "submit": "적용",
+    "done": "잠금 해제 방법이 업데이트되었습니다",
+    "new_password": "새 마스터 비밀번호 (최소 8자)",
+    "new_password2": "새 마스터 비밀번호 다시 입력",
+    "none.warn": "경고: 이 기기에 접근할 수 있는 사람은 누구나 모든 비밀 키를 읽을 수 있으며, 스크린샷과 내보내기도 보호되지 않습니다."
+  },
+  "reveal": {
+    "title": "비밀 키 보기",
+    "master": "마스터 비밀번호 (비밀 키 표시에 필요)",
+    "submit": "보기",
+    "secret": "비밀 키 (Base32)",
+    "uri": "otpauth:// 링크",
+    "hint": "이것은 절대 누구와도 공유하지 마세요."
+  },
+  "common": {
+    "cancel": "취소",
+    "close": "닫기",
+    "back": "뒤로",
+    "ok": "확인",
+    "save": "저장",
+    "error": "문제가 발생했습니다"
+  },
+  "toast": {
+    "added": "계정이 추가되었습니다",
+    "imported": "계정 {n}개를 가져왔습니다",
+    "deleted": "계정이 삭제되었습니다",
+    "updated": "계정이 업데이트되었습니다"
+  }
+}

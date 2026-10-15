@@ -117,7 +117,7 @@
     },
     "file": {
       "choose": "Choose backup file…",
-      "hint": "Authio backups, Aegis vaults (auth files), Authme exports and otpauth text lists are supported."
+      "hint": "Authio backups, Aegis, Authme, 2FAS, andOTP, Raivo, Bitwarden exports, Steam .maFiles and otpauth text lists are supported."
     },
     "text": {
       "label": "Paste backup contents or otpauth:// URIs",
@@ -156,6 +156,8 @@
   },
   "settings": {
     "title": "Settings",
+    "language": "Language",
+    "language.hint": "Applies immediately — restarts keep your choice",
     "theme": "Theme",
     "density": "Density",
     "font": "Code size",
@@ -170,7 +172,7 @@
     "unlock_method": "Unlock method",
     "timer_number": "Show countdown number inside the timer ring",
     "change": "Change…",
-    "about": "Authio {v} — MIT licensed. No internet, no telemetry. Secrets never leave this device.",
+    "about": "Authio {v} — free and open source (MIT). Fully offline: no internet, no telemetry, no accounts. Your secrets never leave this device.",
     "saved": "Settings saved",
     "theme.system": "System",
     "theme.light": "Light",
@@ -184,6 +186,11 @@
     "mode.password": "Master password",
     "mode.keychain": "Windows sign-in",
     "mode.none": "No security"
+  },
+  "about": {
+    "title": "About",
+    "github": "GitHub — source, issues & releases",
+    "donate": "Donate — support development"
   },
   "chg": {
     "title": "Change unlock method",

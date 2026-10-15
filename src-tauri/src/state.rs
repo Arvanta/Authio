@@ -18,7 +18,6 @@ pub struct Session {
 
 /// Drafts awaiting user confirmation in the import-preview dialog.
 pub struct PendingImport {
-    pub format: String,
     pub drafts: Vec<Draft>,
 }
 

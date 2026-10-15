@@ -183,6 +183,7 @@ pub fn run() {
             commands::get_settings,
             commands::set_settings,
             commands::user_activity,
+            commands::open_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Authio");

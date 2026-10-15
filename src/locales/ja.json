@@ -1,0 +1,228 @@
+{
+  "app": {
+    "name": "Authio",
+    "tagline": "あなたのコードを、あなたのデバイスに。オフライン。暗号化。オープンソース。"
+  },
+  "setup": {
+    "title": "ボールトのセットアップ",
+    "intro": "すべてのシークレットは AES-256-GCM で暗号化され、このデバイスから外に出ることはありません。暗号鍵の保護方法を選んでください:",
+    "password": "マスターパスワード（8文字以上）",
+    "confirm": "マスターパスワードを確認",
+    "mismatch": "パスワードが一致しません",
+    "create": "ボールトを作成",
+    "creating": "鍵を生成しています…",
+    "mode": {
+      "password": "マスターパスワード",
+      "keychain": "Windows サインイン（OS キーチェーン）",
+      "none": "セキュリティなし"
+    }
+  },
+  "lock": {
+    "title": "おかえりなさい",
+    "password": "マスターパスワード",
+    "unlock": "ロック解除",
+    "auto": "安全のため自動的にロックされました。",
+    "subtitle": {
+      "password": "コードのロックを解除するにはマスターパスワードを入力してください。",
+      "keychain": "ボールトは Windows セッションとともにロック解除されます。",
+      "none": "このボールトはパスワードで保護されていません。"
+    }
+  },
+  "main": {
+    "search": "アカウントを検索…",
+    "add": "アカウントを追加",
+    "import": "インポート",
+    "export": "エクスポート",
+    "settings": "設定",
+    "lock": "今すぐロック",
+    "showall": "すべてのコードを表示",
+    "hideall": "すべてのコードを隠す",
+    "view": "表示を切り替え",
+    "grouped": "アカウントをグループ化",
+    "filter_group": "グループで絞り込む",
+    "pinned": "ピン留め",
+    "accounts": "アカウント",
+    "none": "検索に一致するアカウントがありません。",
+    "empty": {
+      "title": "まだアカウントがありません",
+      "hint": "手動で追加するか、QR 画像をスキャンするか、Google Authenticator・Aegis・Authme からインポートしてください。"
+    }
+  },
+  "code": {
+    "reveal": "コードを表示",
+    "hide": "コードを隠す",
+    "copy": "コードをコピー",
+    "copied": "コピーしました！",
+    "next": "次のコード",
+    "hotp": {
+      "hint": "カウンター式 — タップで次のコードへ"
+    }
+  },
+  "card": {
+    "edit": "編集",
+    "pin": "ピン留め",
+    "unpin": "ピン留め解除",
+    "delete": "削除",
+    "secret": "シークレットを表示",
+    "menu": "その他の操作"
+  },
+  "group": {
+    "all": "すべて",
+    "ungrouped": "未分類",
+    "label": "グループ",
+    "placeholder": "任意 — 例: 仕事"
+  },
+  "delete": {
+    "title": "アカウントを削除しますか？",
+    "msg": "「{issuer} / {name}」は完全に削除されます。別のサインイン手段があることを確認してください。",
+    "confirm": "削除"
+  },
+  "add": {
+    "title": "アカウントを追加",
+    "qr": {
+      "choose": "画像を選択…",
+      "hint": "QR コードのスクリーンショットまたは写真を選択してください（PNG または JPEG）。Google Authenticator のエクスポート QR に対応しています。"
+    },
+    "uri": {
+      "label": "otpauth:// リンクを貼り付け",
+      "hint": "通常 otpauth://totp/… で始まります",
+      "submit": "リンクから追加"
+    },
+    "tab": {
+      "qr": "QR 画像",
+      "uri": "otpauth:// リンク",
+      "manual": "手動入力"
+    },
+    "manual": {
+      "type": "種類",
+      "issuer": "サービス（発行者）",
+      "name": "アカウント名",
+      "secret": "シークレットキー（Base32）",
+      "counter": "初期カウンター",
+      "algorithm": "アルゴリズム",
+      "digits": "桁数",
+      "period": "周期（秒）",
+      "submit": "アカウントを追加",
+      "hint": "シークレットは、2FA を有効にする際に QR コードの隣に表示される Base32 文字列です。",
+      "issuer.ph": "例: GitHub",
+      "name.ph": "例: alice@example.com",
+      "secret.ph": "JBSW Y3DP EHPK 3PXP…"
+    }
+  },
+  "import": {
+    "title": "アカウントのインポート",
+    "tab": {
+      "file": "ファイルから",
+      "text": "テキストを貼り付け"
+    },
+    "file": {
+      "choose": "バックアップファイルを選択…",
+      "hint": "Authio バックアップ、Aegis、Authme、2FAS、andOTP、Raivo、Bitwarden エクスポート、Steam の .maFile、otpauth テキストリストに対応しています。"
+    },
+    "text": {
+      "label": "バックアップ内容または otpauth:// リンクを貼り付け",
+      "submit": "続行"
+    },
+    "password": {
+      "title": "このバックアップは暗号化されています",
+      "hint": "このバックアップファイルを保護しているパスワードを入力してください。",
+      "submit": "復号"
+    },
+    "preview": {
+      "title": "インポートの確認",
+      "format": "検出された形式",
+      "skipped": "{n} 件の不正なエントリをスキップしました",
+      "dupe": "重複",
+      "none": "アカウントが見つかりませんでした。",
+      "submit": "選択をインポート（{n}）",
+      "selectall": "すべて選択"
+    }
+  },
+  "export": {
+    "title": "バックアップのエクスポート",
+    "mode": "保護",
+    "encrypted": "暗号化（推奨）",
+    "plain": "暗号化なしの JSON",
+    "password": "バックアップのパスワード（8文字以上）",
+    "password2": "パスワードを再入力",
+    "mismatch": "パスワードが一致しません",
+    "master": "マスターパスワード（再認証）",
+    "submit": "保存先を選んでエクスポート",
+    "empty": "エクスポートできるアカウントがまだありません。",
+    "encrypted.desc": "独自のパスワード（Argon2id + AES-256-GCM）で保護されます。",
+    "plain.desc": "誰でも読めます。信頼できる別アプリへの移行にのみ使用してください。",
+    "plain.warn": "このファイルにはすべてのシークレットが平文で含まれます。",
+    "plain.ack": "リスクを理解しました"
+  },
+  "settings": {
+    "title": "設定",
+    "language": "言語",
+    "language.hint": "すぐに適用 — 再起動後も保持されます",
+    "theme": "テーマ",
+    "density": "表示密度",
+    "font": "コードのサイズ",
+    "view": "表示スタイル",
+    "sort_alpha": "アルファベット順に並べ替え（ドラッグ＆ドロップは無効）",
+    "hide_codes": "表示するまでコードを隠す",
+    "autolock": "無操作で自動ロック",
+    "lock_minimize": "ウィンドウを最小化したらロック",
+    "tray": "システムトレイで実行（閉じるボタンは終了ではなくトレイに最小化）",
+    "security": "セキュリティ",
+    "data": "データ",
+    "unlock_method": "ロック解除方法",
+    "timer_number": "タイマーリング内に残り秒数を表示",
+    "change": "変更…",
+    "about": "Authio {v} — フリーかつオープンソース（MIT）。完全オフライン: インターネット接続なし、テレメトリなし、アカウントなし。シークレットがこのデバイスから出ることはありません。",
+    "saved": "設定を保存しました",
+    "theme.system": "システム",
+    "theme.light": "ライト",
+    "theme.dark": "ダーク",
+    "density.compact": "コンパクト",
+    "density.comfortable": "ゆったり",
+    "view.rows": "行",
+    "view.tiles": "タイル",
+    "autolock.minutes": "分",
+    "autolock.off": "分（0 で無効）",
+    "mode.password": "マスターパスワード",
+    "mode.keychain": "Windows サインイン",
+    "mode.none": "セキュリティなし"
+  },
+  "about": {
+    "title": "このアプリについて",
+    "github": "GitHub — ソース・Issue・リリース",
+    "donate": "寄付 — 開発を支援する"
+  },
+  "chg": {
+    "title": "ロック解除方法の変更",
+    "current": "現在のマスターパスワード",
+    "newmode": "新しい方法",
+    "mismatch": "パスワードが一致しません",
+    "submit": "適用",
+    "done": "ロック解除方法を更新しました",
+    "new_password": "新しいマスターパスワード（8文字以上）",
+    "new_password2": "新しいマスターパスワードを再入力",
+    "none.warn": "警告: このデバイスにアクセスできる人は誰でもすべてのシークレットを読めます。スクリーンショットやエクスポートも無防備です。"
+  },
+  "reveal": {
+    "title": "シークレットを表示",
+    "master": "マスターパスワード（シークレット表示に必須）",
+    "submit": "表示",
+    "secret": "シークレット（Base32）",
+    "uri": "otpauth:// リンク",
+    "hint": "これは誰にも共有しないでください。"
+  },
+  "common": {
+    "cancel": "キャンセル",
+    "close": "閉じる",
+    "back": "戻る",
+    "ok": "OK",
+    "save": "保存",
+    "error": "問題が発生しました"
+  },
+  "toast": {
+    "added": "アカウントを追加しました",
+    "imported": "{n} 件のアカウントをインポートしました",
+    "deleted": "アカウントを削除しました",
+    "updated": "アカウントを更新しました"
+  }
+}

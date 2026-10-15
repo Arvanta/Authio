@@ -1,0 +1,228 @@
+{
+  "app": {
+    "name": "Authio",
+    "tagline": "你的验证码，只在你的设备上。离线。加密。开源。"
+  },
+  "setup": {
+    "title": "设置你的保险库",
+    "intro": "所有密钥都用 AES-256-GCM 加密，永远不会离开这台设备。请选择加密密钥的保护方式：",
+    "password": "主密码（至少 8 个字符）",
+    "confirm": "确认主密码",
+    "mismatch": "两次输入的密码不一致",
+    "create": "创建保险库",
+    "creating": "正在生成密钥…",
+    "mode": {
+      "password": "主密码",
+      "keychain": "Windows 登录（系统钥匙串）",
+      "none": "无安全保护"
+    }
+  },
+  "lock": {
+    "title": "欢迎回来",
+    "password": "主密码",
+    "unlock": "解锁",
+    "auto": "为了安全已自动锁定。",
+    "subtitle": {
+      "password": "输入主密码以解锁你的验证码。",
+      "keychain": "保险库会随你的 Windows 会话一起解锁。",
+      "none": "此保险库没有密码保护。"
+    }
+  },
+  "main": {
+    "search": "搜索账户…",
+    "add": "添加账户",
+    "import": "导入",
+    "export": "导出",
+    "settings": "设置",
+    "lock": "立即锁定",
+    "showall": "显示所有验证码",
+    "hideall": "隐藏所有验证码",
+    "view": "切换视图",
+    "grouped": "账户分组显示",
+    "filter_group": "按分组筛选",
+    "pinned": "置顶",
+    "accounts": "账户",
+    "none": "没有匹配搜索的账户。",
+    "empty": {
+      "title": "还没有账户",
+      "hint": "手动添加一个，扫描二维码图片，或从 Google Authenticator、Aegis、Authme 导入。"
+    }
+  },
+  "code": {
+    "reveal": "显示验证码",
+    "hide": "隐藏验证码",
+    "copy": "复制验证码",
+    "copied": "已复制！",
+    "next": "下一个验证码",
+    "hotp": {
+      "hint": "计数型 — 点击查看下一个验证码"
+    }
+  },
+  "card": {
+    "edit": "编辑",
+    "pin": "置顶",
+    "unpin": "取消置顶",
+    "delete": "删除",
+    "secret": "显示密钥",
+    "menu": "更多操作"
+  },
+  "group": {
+    "all": "全部",
+    "ungrouped": "未分组",
+    "label": "分组",
+    "placeholder": "可选 — 例如：工作"
+  },
+  "delete": {
+    "title": "删除账户？",
+    "msg": "“{issuer} / {name}”将被永久删除。请确认你有其他登录方式。",
+    "confirm": "删除"
+  },
+  "add": {
+    "title": "添加账户",
+    "qr": {
+      "choose": "选择图片…",
+      "hint": "选择二维码的截图或照片（PNG 或 JPEG）。支持 Google Authenticator 导出的二维码。"
+    },
+    "uri": {
+      "label": "粘贴 otpauth:// 链接",
+      "hint": "通常以 otpauth://totp/… 开头",
+      "submit": "从链接添加"
+    },
+    "tab": {
+      "qr": "二维码图片",
+      "uri": "otpauth:// 链接",
+      "manual": "手动输入"
+    },
+    "manual": {
+      "type": "类型",
+      "issuer": "服务（发行者）",
+      "name": "账户名称",
+      "secret": "密钥（Base32）",
+      "counter": "初始计数",
+      "algorithm": "算法",
+      "digits": "位数",
+      "period": "周期（秒）",
+      "submit": "添加账户",
+      "hint": "密钥是开启两步验证时显示在二维码旁边的 Base32 字符串。",
+      "issuer.ph": "例如：GitHub",
+      "name.ph": "例如：alice@example.com",
+      "secret.ph": "JBSW Y3DP EHPK 3PXP…"
+    }
+  },
+  "import": {
+    "title": "导入账户",
+    "tab": {
+      "file": "从文件",
+      "text": "粘贴文本"
+    },
+    "file": {
+      "choose": "选择备份文件…",
+      "hint": "支持 Authio 备份、Aegis、Authme、2FAS、andOTP、Raivo、Bitwarden 导出、Steam 的 .maFile 以及 otpauth 文本列表。"
+    },
+    "text": {
+      "label": "粘贴备份内容或 otpauth:// 链接",
+      "submit": "继续"
+    },
+    "password": {
+      "title": "此备份已加密",
+      "hint": "请输入保护此备份文件的密码。",
+      "submit": "解密"
+    },
+    "preview": {
+      "title": "检查导入",
+      "format": "检测到的格式",
+      "skipped": "已跳过 {n} 条格式错误的条目",
+      "dupe": "重复",
+      "none": "未找到账户。",
+      "submit": "导入所选（{n}）",
+      "selectall": "全选"
+    }
+  },
+  "export": {
+    "title": "导出备份",
+    "mode": "保护方式",
+    "encrypted": "加密（推荐）",
+    "plain": "未加密的 JSON",
+    "password": "备份密码（至少 8 位）",
+    "password2": "再次输入密码",
+    "mismatch": "两次输入的密码不一致",
+    "master": "主密码（重新认证）",
+    "submit": "选择位置并导出",
+    "empty": "还没有可导出的账户。",
+    "encrypted.desc": "用独立的密码保护（Argon2id + AES-256-GCM）。",
+    "plain.desc": "任何人都可读取。仅用于迁移到另一个受信任的应用。",
+    "plain.warn": "此文件将以明文包含你的所有密钥。",
+    "plain.ack": "我了解风险"
+  },
+  "settings": {
+    "title": "设置",
+    "language": "语言",
+    "language.hint": "立即生效 — 重启后仍然保留",
+    "theme": "主题",
+    "density": "显示密度",
+    "font": "验证码大小",
+    "view": "视图样式",
+    "sort_alpha": "按字母排序（禁用拖放排序）",
+    "hide_codes": "在显示前隐藏验证码",
+    "autolock": "无操作后自动锁定",
+    "lock_minimize": "窗口最小化时锁定",
+    "tray": "在系统托盘运行（点关闭会最小化到托盘而不是退出）",
+    "security": "安全",
+    "data": "数据",
+    "unlock_method": "解锁方式",
+    "timer_number": "在计时环内显示倒计时数字",
+    "change": "更改…",
+    "about": "Authio {v} — 自由开源软件（MIT）。完全离线：无网络、无遥测、无账户。你的密钥永远不会离开这台设备。",
+    "saved": "设置已保存",
+    "theme.system": "跟随系统",
+    "theme.light": "浅色",
+    "theme.dark": "深色",
+    "density.compact": "紧凑",
+    "density.comfortable": "舒适",
+    "view.rows": "列表",
+    "view.tiles": "磁贴",
+    "autolock.minutes": "分钟",
+    "autolock.off": "分钟（0 = 关闭）",
+    "mode.password": "主密码",
+    "mode.keychain": "Windows 登录",
+    "mode.none": "无安全保护"
+  },
+  "about": {
+    "title": "关于",
+    "github": "GitHub — 源码、问题与发布",
+    "donate": "捐赠 — 支持开发"
+  },
+  "chg": {
+    "title": "更改解锁方式",
+    "current": "当前主密码",
+    "newmode": "新方式",
+    "mismatch": "两次输入的密码不一致",
+    "submit": "应用",
+    "done": "解锁方式已更新",
+    "new_password": "新主密码（至少 8 位）",
+    "new_password2": "再次输入新主密码",
+    "none.warn": "警告：任何能访问这台设备的人都能读取你的所有密钥；截图和导出也不受保护。"
+  },
+  "reveal": {
+    "title": "显示密钥",
+    "master": "主密码（显示密钥时必填）",
+    "submit": "显示",
+    "secret": "密钥（Base32）",
+    "uri": "otpauth:// 链接",
+    "hint": "切勿与任何人分享。"
+  },
+  "common": {
+    "cancel": "取消",
+    "close": "关闭",
+    "back": "返回",
+    "ok": "确定",
+    "save": "保存",
+    "error": "出现了问题"
+  },
+  "toast": {
+    "added": "已添加账户",
+    "imported": "已导入 {n} 个账户",
+    "deleted": "已删除账户",
+    "updated": "已更新账户"
+  }
+}

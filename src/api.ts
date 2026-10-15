@@ -28,6 +28,7 @@ export interface StatusDto {
   initialized: boolean;
   unlocked: boolean;
   mode: UnlockMode | null;
+  version: string;
 }
 
 export interface PreviewEntry {
@@ -65,6 +66,7 @@ export interface Settings {
   show_timer_number: boolean;
   grouped_view: boolean;
   tray: boolean;
+  lang: string; // "en" | "de" | "es" | "fr" | "ja" | "ko" | "pt" | "ru" | "zh-CN"
   window?: { x: number; y: number; w: number; h: number } | null;
 }
 
@@ -117,6 +119,8 @@ export const api = {
 
   getSettings: () => invoke<Settings>("get_settings"),
   setSettings: (settings: Settings) => invoke<void>("set_settings", { settings }),
+  /** "github" | "donate" — backend hardcodes the URLs, opens the default browser. */
+  openUrl: (target: string) => invoke<void>("open_url", { target }),
   userActivity: () => invoke<void>("user_activity"),
 };
 

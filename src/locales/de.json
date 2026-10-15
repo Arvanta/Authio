@@ -1,0 +1,228 @@
+{
+  "app": {
+    "name": "Authio",
+    "tagline": "Deine Codes, dein Gerät. Offline. Verschlüsselt. Open Source."
+  },
+  "setup": {
+    "title": "Tresor einrichten",
+    "intro": "Alle Geheimnisse werden mit AES-256-GCM verschlüsselt und verlassen dieses Gerät nie. Wähle, wie der Schlüssel geschützt wird:",
+    "password": "Master-Passwort (min. 8 Zeichen)",
+    "confirm": "Master-Passwort bestätigen",
+    "mismatch": "Passwörter stimmen nicht überein",
+    "create": "Tresor erstellen",
+    "creating": "Schlüssel wird abgeleitet…",
+    "mode": {
+      "password": "Master-Passwort",
+      "keychain": "Windows-Anmeldung (OS-Schlüsselbund)",
+      "none": "Keine Sicherheit"
+    }
+  },
+  "lock": {
+    "title": "Willkommen zurück",
+    "password": "Master-Passwort",
+    "unlock": "Entsperren",
+    "auto": "Zu deiner Sicherheit automatisch gesperrt.",
+    "subtitle": {
+      "password": "Gib dein Master-Passwort ein, um deine Codes zu entsperren.",
+      "keychain": "Dein Tresor wird mit deiner Windows-Sitzung entsperrt.",
+      "none": "Dieser Tresor ist nicht durch ein Passwort geschützt."
+    }
+  },
+  "main": {
+    "search": "Konten suchen…",
+    "add": "Konto hinzufügen",
+    "import": "Importieren",
+    "export": "Exportieren",
+    "settings": "Einstellungen",
+    "lock": "Jetzt sperren",
+    "showall": "Alle Codes anzeigen",
+    "hideall": "Alle Codes verbergen",
+    "view": "Ansicht wechseln",
+    "grouped": "Konten gruppieren",
+    "filter_group": "Nach Gruppe filtern",
+    "pinned": "Angeheftet",
+    "accounts": "Konten",
+    "none": "Keine Konten entsprechen deiner Suche.",
+    "empty": {
+      "title": "Noch keine Konten",
+      "hint": "Füge eines manuell hinzu, scanne ein QR-Bild oder importiere aus Google Authenticator, Aegis oder Authme."
+    }
+  },
+  "code": {
+    "reveal": "Code anzeigen",
+    "hide": "Code verbergen",
+    "copy": "Code kopieren",
+    "copied": "Kopiert!",
+    "next": "Nächster Code",
+    "hotp": {
+      "hint": "Zählerbasiert — tippen für den nächsten Code"
+    }
+  },
+  "card": {
+    "edit": "Bearbeiten",
+    "pin": "Anheften",
+    "unpin": "Lösen",
+    "delete": "Löschen",
+    "secret": "Geheimnis anzeigen",
+    "menu": "Weitere Aktionen"
+  },
+  "group": {
+    "all": "Alle",
+    "ungrouped": "Nicht gruppiert",
+    "label": "Gruppe",
+    "placeholder": "Optional — z. B. Arbeit"
+  },
+  "delete": {
+    "title": "Konto löschen?",
+    "msg": "„{issuer} / {name}“ wird endgültig entfernt. Stelle sicher, dass du dich anders anmelden kannst.",
+    "confirm": "Löschen"
+  },
+  "add": {
+    "title": "Konto hinzufügen",
+    "qr": {
+      "choose": "Bild auswählen…",
+      "hint": "Wähle einen Screenshot oder ein Foto eines QR-Codes (PNG oder JPEG). QR-Codes aus Google Authenticator werden unterstützt."
+    },
+    "uri": {
+      "label": "otpauth://-URI einfügen",
+      "hint": "Beginnt meist mit otpauth://totp/…",
+      "submit": "Aus Link hinzufügen"
+    },
+    "tab": {
+      "qr": "QR-Bild",
+      "uri": "otpauth://-Link",
+      "manual": "Manuelle Eingabe"
+    },
+    "manual": {
+      "type": "Typ",
+      "issuer": "Dienst (Issuer)",
+      "name": "Kontoname",
+      "secret": "Geheimschlüssel (Base32)",
+      "counter": "Startzähler",
+      "algorithm": "Algorithmus",
+      "digits": "Stellen",
+      "period": "Periode (Sekunden)",
+      "submit": "Konto hinzufügen",
+      "hint": "Das Geheimnis ist der Base32-String, der beim Aktivieren von 2FA neben dem QR-Code angezeigt wird.",
+      "issuer.ph": "z. B. GitHub",
+      "name.ph": "z. B. alice@example.com",
+      "secret.ph": "JBSW Y3DP EHPK 3PXP…"
+    }
+  },
+  "import": {
+    "title": "Konten importieren",
+    "tab": {
+      "file": "Aus Datei",
+      "text": "Text einfügen"
+    },
+    "file": {
+      "choose": "Backup-Datei auswählen…",
+      "hint": "Unterstützt werden Authio-Backups, Aegis, Authme, 2FAS, andOTP, Raivo, Bitwarden-Exporte, Steam-.maFiles und otpauth-Textlisten."
+    },
+    "text": {
+      "label": "Backup-Inhalt oder otpauth://-URIs einfügen",
+      "submit": "Weiter"
+    },
+    "password": {
+      "title": "Dieses Backup ist verschlüsselt",
+      "hint": "Gib das Passwort ein, das diese Backup-Datei schützt.",
+      "submit": "Entschlüsseln"
+    },
+    "preview": {
+      "title": "Import prüfen",
+      "format": "Erkanntes Format",
+      "skipped": "{n} fehlerhafte(r) Eintrag/Einträge übersprungen",
+      "dupe": "Duplikat",
+      "none": "Keine Konten gefunden.",
+      "submit": "Auswahl importieren ({n})",
+      "selectall": "Alle auswählen"
+    }
+  },
+  "export": {
+    "title": "Backup exportieren",
+    "mode": "Schutz",
+    "encrypted": "Verschlüsselt (empfohlen)",
+    "plain": "Unverschlüsseltes JSON",
+    "password": "Backup-Passwort (min. 8)",
+    "password2": "Passwort wiederholen",
+    "mismatch": "Passwörter stimmen nicht überein",
+    "master": "Master-Passwort (Erneute Prüfung)",
+    "submit": "Speicherort wählen & exportieren",
+    "empty": "Noch keine Konten zum Exportieren.",
+    "encrypted.desc": "Geschützt mit eigenem Passwort (Argon2id + AES-256-GCM).",
+    "plain.desc": "Von jedem lesbar. Nur für die Migration in eine andere vertrauenswürdige App verwenden.",
+    "plain.warn": "Diese Datei enthält ALLE deine Geheimnisse im Klartext.",
+    "plain.ack": "Ich verstehe das Risiko"
+  },
+  "settings": {
+    "title": "Einstellungen",
+    "language": "Sprache",
+    "language.hint": "Gilt sofort — Neustarts merken sich die Auswahl",
+    "theme": "Design",
+    "density": "Dichte",
+    "font": "Codegröße",
+    "view": "Ansichtsstil",
+    "sort_alpha": "Alphabetisch sortieren (deaktiviert Drag & Drop)",
+    "hide_codes": "Codes bis zum Anzeigen verbergen",
+    "autolock": "Automatische Sperre bei Inaktivität",
+    "lock_minimize": "Sperren, wenn das Fenster minimiert wird",
+    "tray": "Im System-Tray ausführen (Schließen minimiert in die Tray statt zu beenden)",
+    "security": "Sicherheit",
+    "data": "Daten",
+    "unlock_method": "Entsperrmethode",
+    "timer_number": "Countdown-Zahl im Zeitring anzeigen",
+    "change": "Ändern…",
+    "about": "Authio {v} — frei und quelloffen (MIT). Vollständig offline: kein Internet, keine Telemetrie, keine Konten. Deine Geheimnisse verlassen dieses Gerät nie.",
+    "saved": "Einstellungen gespeichert",
+    "theme.system": "System",
+    "theme.light": "Hell",
+    "theme.dark": "Dunkel",
+    "density.compact": "Kompakt",
+    "density.comfortable": "Komfortabel",
+    "view.rows": "Zeilen",
+    "view.tiles": "Kacheln",
+    "autolock.minutes": "Minuten",
+    "autolock.off": "Minuten (0 = aus)",
+    "mode.password": "Master-Passwort",
+    "mode.keychain": "Windows-Anmeldung",
+    "mode.none": "Keine Sicherheit"
+  },
+  "about": {
+    "title": "Über",
+    "github": "GitHub — Quellcode, Issues & Releases",
+    "donate": "Spenden — Entwicklung unterstützen"
+  },
+  "chg": {
+    "title": "Entsperrmethode ändern",
+    "current": "Aktuelles Master-Passwort",
+    "newmode": "Neue Methode",
+    "mismatch": "Passwörter stimmen nicht überein",
+    "submit": "Anwenden",
+    "done": "Entsperrmethode aktualisiert",
+    "new_password": "Neues Master-Passwort (min. 8)",
+    "new_password2": "Neues Master-Passwort wiederholen",
+    "none.warn": "Warnung: Jeder mit Zugriff auf dieses Gerät kann alle Geheimnisse lesen; Screenshots und Exporte sind ungeschützt."
+  },
+  "reveal": {
+    "title": "Geheimnis anzeigen",
+    "master": "Master-Passwort (erforderlich, um Geheimnisse anzuzeigen)",
+    "submit": "Anzeigen",
+    "secret": "Geheimnis (Base32)",
+    "uri": "otpauth://-URI",
+    "hint": "Teile dies niemals mit jemandem."
+  },
+  "common": {
+    "cancel": "Abbrechen",
+    "close": "Schließen",
+    "back": "Zurück",
+    "ok": "OK",
+    "save": "Speichern",
+    "error": "Etwas ist schiefgelaufen"
+  },
+  "toast": {
+    "added": "Konto hinzugefügt",
+    "imported": "{n} Konto(-en) importiert",
+    "deleted": "Konto gelöscht",
+    "updated": "Konto aktualisiert"
+  }
+}
