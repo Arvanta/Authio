@@ -38,6 +38,8 @@ const ICONS = {
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   list: '<path d="M8 6h13M8 12h13M8 18h13M4 6h.01M4 12h.01M4 18h.01"/>',
   grid: '<rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/>',
+  kebab: '<circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none"/>',
+  layers: '<path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/>',
 } as const;
 type IconName = keyof typeof ICONS;
 
@@ -181,9 +183,13 @@ let settings: Settings = {
   auto_lock_minutes: 5,
   lock_on_minimize: true,
   view_mode: "rows",
+  show_timer_number: true,
+  grouped_view: false,
 };
 let accounts: AccountDto[] = [];
 let search = "";
+let groupFilter = "ALL"; // "ALL" | "__none__" | group name
+let groupSelEl: HTMLSelectElement | null = null;
 const hidden = new Set<string>();
 const lastHotp = new Map<string, { code: string; until: number }>();
 const tickRefs = new Map<
@@ -385,17 +391,21 @@ async function enterMain() {
   void pollCodes();
 }
 
-function sortedFiltered(): { pinned: AccountDto[]; rest: AccountDto[] } {
+/** Accounts after the search query and the group filter are applied. */
+function filteredList(): AccountDto[] {
   const q = search.trim().toLowerCase();
   let list = accounts;
   if (q) list = list.filter((a) => `${a.issuer} ${a.name}`.toLowerCase().includes(q));
-  const cmp = settings.sort_alpha
-    ? (x: AccountDto, y: AccountDto) =>
-        (x.issuer || x.name).localeCompare(y.issuer || y.name) || x.name.localeCompare(y.name)
-    : (x: AccountDto, y: AccountDto) => x.sort - y.sort;
-  const pinned = list.filter((a) => a.pinned).sort(cmp);
-  const rest = list.filter((a) => !a.pinned).sort(cmp);
-  return { pinned, rest };
+  if (groupFilter === "__none__") list = list.filter((a) => !a.group);
+  else if (groupFilter !== "ALL") list = list.filter((a) => a.group === groupFilter);
+  return list;
+}
+
+/** Shared comparator: alphabetical in alpha mode, manual order otherwise. */
+function baseCmp(): (x: AccountDto, y: AccountDto) => number {
+  return settings.sort_alpha
+    ? (x, y) => (x.issuer || x.name).localeCompare(y.issuer || y.name) || x.name.localeCompare(y.name)
+    : (x, y) => x.sort - y.sort;
 }
 
 function avatarColor(key: string): string {
@@ -407,6 +417,80 @@ function avatarColor(key: string): string {
 
 function grouped(code: string): string {
   return code.replace(/(\d{3})(?=\d)/g, "$1 ");
+}
+
+interface MenuItem {
+  icon: IconName;
+  label: string;
+  danger?: boolean;
+  onPick: () => void;
+}
+
+let openMenuEl: (() => void) | null = null; // disposer of the currently open menu
+function closeMenu() {
+  openMenuEl?.();
+  openMenuEl = null;
+}
+
+/** Tiny anchored dropdown menu; closes on outside click or Escape. */
+function openMenu(anchor: HTMLElement, items: MenuItem[]) {
+  if (openMenuEl) {
+    closeMenu();
+    return; // clicking the same button toggles it shut
+  }
+  const menu = el("div", "menu");
+  for (const it of items) {
+    const b = el("button", "mi" + (it.danger ? " danger" : ""));
+    b.type = "button";
+    b.append(icon(it.icon), document.createTextNode(it.label));
+    b.onclick = (e) => {
+      e.stopPropagation();
+      closeMenu();
+      it.onPick();
+    };
+    menu.append(b);
+  }
+  document.body.append(menu);
+  const r = anchor.getBoundingClientRect();
+  menu.style.top = `${Math.min(window.innerHeight - menu.offsetHeight - 8, r.bottom + 5)}px`;
+  menu.style.left = `${Math.max(8, Math.min(window.innerWidth - menu.offsetWidth - 8, r.right - menu.offsetWidth))}px`;
+  const onDown = (e: MouseEvent) => {
+    if (!menu.contains(e.target as Node)) closeMenu();
+  };
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape") closeMenu();
+  };
+  window.addEventListener("mousedown", onDown, true);
+  window.addEventListener("keydown", onKey);
+  openMenuEl = () => {
+    menu.remove();
+    window.removeEventListener("mousedown", onDown, true);
+    window.removeEventListener("keydown", onKey);
+  };
+}
+
+async function pinFlow(a: AccountDto) {
+  await api.setPinned(a.id, !a.pinned);
+  await refresh();
+}
+
+async function deleteAccountFlow(a: AccountDto) {
+  const ok = await confirmBox(
+    t("delete.title"),
+    t("delete.msg", { issuer: a.issuer || "—", name: a.name }),
+    t("delete.confirm"),
+    true,
+  );
+  if (ok) {
+    try {
+      await api.deleteAccount(a.id);
+      hidden.delete(a.id);
+      toast(t("toast.deleted"));
+      await refresh();
+    } catch (e) {
+      toast(fmtError(e), true);
+    }
+  }
 }
 
 function buildTimer(period: number): {
@@ -435,6 +519,7 @@ function buildTimer(period: number): {
   fill.setAttribute("stroke-dashoffset", "0");
   svg.append(track, fill);
   const remain = el("span", "remain", String(period));
+  if (!settings.show_timer_number) remain.style.display = "none";
   wrap.append(svg, remain);
   return { wrap, fill, remain };
 }
@@ -507,39 +592,20 @@ function accountCard(a: AccountDto): HTMLElement {
     void pollCodes();
   };
 
-  const pinB = iconBtn("star", a.pinned ? t("card.unpin") : t("card.pin"));
-  if (a.pinned) pinB.classList.add("on");
-  pinB.onclick = async () => {
-    await api.setPinned(a.id, !a.pinned);
-    await refresh();
+  // Kebab menu (⋮): pin + edit + reveal secret + delete live behind it.
+  const kebabB = iconBtn("kebab", t("card.menu"));
+  kebabB.onclick = (e) => {
+    e.stopPropagation();
+    openMenu(kebabB, [
+      { icon: "star", label: a.pinned ? t("card.unpin") : t("card.pin"), onPick: () => void pinFlow(a) },
+      { icon: "pencil", label: t("card.edit"), onPick: () => openEditModal(a) },
+      { icon: "key", label: t("card.secret"), onPick: () => openRevealModal(a) },
+      { icon: "trash", label: t("card.delete"), danger: true, onPick: () => void deleteAccountFlow(a) },
+    ]);
   };
 
-  const editB = iconBtn("pencil", t("card.edit"), "ghost");
-  editB.onclick = () => openEditModal(a);
-  const secretB = iconBtn("key", t("card.secret"), "ghost");
-  secretB.onclick = () => openRevealModal(a);
-  const delB = iconBtn("trash", t("card.delete"), "ghost");
-  delB.onclick = async () => {
-    const ok = await confirmBox(
-      t("delete.title"),
-      t("delete.msg", { issuer: a.issuer || "—", name: a.name }),
-      t("delete.confirm"),
-      true,
-    );
-    if (ok) {
-      try {
-        await api.deleteAccount(a.id);
-        hidden.delete(a.id);
-        toast(t("toast.deleted"));
-        await refresh();
-      } catch (e) {
-        toast(fmtError(e), true);
-      }
-    }
-  };
-
-  // Right-edge order: timer ring → code → copy → pin → hover-ghost actions.
-  actions.append(editB, secretB, delB, pinB, copyB, codecol);
+  // Right-edge order: timer ring → code → copy → kebab menu.
+  actions.append(kebabB, copyB, codecol);
 
   // Drag & drop manual reorder (disabled while filtering or alpha-sorting).
   const dnd = !settings.sort_alpha && !search;
@@ -643,34 +709,14 @@ function tileCard(a: AccountDto): HTMLElement {
 
   const pinB = iconBtn("star", a.pinned ? t("card.unpin") : t("card.pin"));
   if (a.pinned) pinB.classList.add("on");
-  pinB.onclick = async () => {
-    await api.setPinned(a.id, !a.pinned);
-    await refresh();
-  };
+  pinB.onclick = () => void pinFlow(a);
 
   const editB = iconBtn("pencil", t("card.edit"), "ghost");
   editB.onclick = () => openEditModal(a);
   const secretB = iconBtn("key", t("card.secret"), "ghost");
   secretB.onclick = () => openRevealModal(a);
   const delB = iconBtn("trash", t("card.delete"), "ghost");
-  delB.onclick = async () => {
-    const ok = await confirmBox(
-      t("delete.title"),
-      t("delete.msg", { issuer: a.issuer || "—", name: a.name }),
-      t("delete.confirm"),
-      true,
-    );
-    if (ok) {
-      try {
-        await api.deleteAccount(a.id);
-        hidden.delete(a.id);
-        toast(t("toast.deleted"));
-        await refresh();
-      } catch (e) {
-        toast(fmtError(e), true);
-      }
-    }
-  };
+  delB.onclick = () => void deleteAccountFlow(a);
 
   const foot = el("div", "t-foot actions");
   foot.append(editB, secretB, delB, el("div", "spacer"), pinB, copyB);
@@ -757,6 +803,24 @@ function renderList() {
   const tiles = settings.view_mode === "tiles";
   listHost.classList.toggle("tiles", tiles);
   listHost.innerHTML = "";
+
+  // Rebuild the topbar group filter, preserving the current selection.
+  if (groupSelEl) {
+    const groupNames = [...new Set(accounts.map((a) => a.group).filter((g) => g))].sort((x, y) =>
+      x.localeCompare(y),
+    );
+    groupSelEl.innerHTML = "";
+    groupSelEl.append(new Option(t("group.all"), "ALL"));
+    for (const g of groupNames) groupSelEl.append(new Option(g, g));
+    if (accounts.some((a) => !a.group)) groupSelEl.append(new Option(t("group.ungrouped"), "__none__"));
+    groupSelEl.style.display = groupNames.length === 0 ? "none" : "";
+    if ([...groupSelEl.options].some((o) => o.value === groupFilter)) {
+      groupSelEl.value = groupFilter;
+    } else {
+      groupFilter = groupSelEl.value = "ALL";
+    }
+  }
+
   if (accounts.length === 0) {
     const empty = el("div", "empty");
     const big = el("div", "big");
@@ -765,15 +829,33 @@ function renderList() {
     listHost.append(empty);
     return;
   }
-  const { pinned, rest } = sortedFiltered();
+  const list = filteredList();
   const mkCard = tiles ? tileCard : accountCard;
-  const q = search.trim();
-  if (pinned.length === 0 && rest.length === 0 && q) {
+  if (list.length === 0) {
     const empty = el("div", "empty");
     empty.append(el("p", "", t("main.none")));
     listHost.append(empty);
     return;
   }
+  const cmp = baseCmp();
+
+  if (settings.grouped_view) {
+    // Sections per group (alphabetical), ungrouped last; pinned first within a group.
+    const groups = [...new Set(list.map((a) => a.group))].sort((x, y) =>
+      x === "" ? 1 : y === "" ? -1 : x.localeCompare(y),
+    );
+    for (const g of groups) {
+      const items = list
+        .filter((a) => a.group === g)
+        .sort((x, y) => Number(y.pinned) - Number(x.pinned) || cmp(x, y));
+      listHost.append(el("div", "section-label", g || t("group.ungrouped")));
+      items.forEach((a) => listHost.append(mkCard(a)));
+    }
+    return;
+  }
+
+  const pinned = list.filter((a) => a.pinned).sort(cmp);
+  const rest = list.filter((a) => !a.pinned).sort(cmp);
   if (pinned.length) {
     listHost.append(el("div", "section-label", t("main.pinned")));
     pinned.forEach((a) => listHost.append(mkCard(a)));
@@ -823,11 +905,30 @@ function renderMain() {
   addB.style.color = "var(--accent)";
   addB.onclick = () => openAddModal();
 
-  const importB = iconBtn("download", t("main.import"));
-  importB.onclick = () => openImportModal();
+  // Group filter dropdown (rebuilt in renderList).
+  const gsel = el("select", "gsel") as HTMLSelectElement;
+  gsel.title = t("main.filter_group");
+  gsel.onchange = () => {
+    groupFilter = gsel.value;
+    renderList();
+    void pollCodes();
+  };
+  groupSelEl = gsel;
 
-  const exportB = iconBtn("upload", t("main.export"));
-  exportB.onclick = () => openExportModal();
+  // Grouped-view toggle (default order vs. grouped sections).
+  const groupB = iconBtn("layers", t("main.grouped"));
+  if (settings.grouped_view) groupB.classList.add("on");
+  groupB.onclick = async () => {
+    settings.grouped_view = !settings.grouped_view;
+    groupB.classList.toggle("on", settings.grouped_view);
+    try {
+      await api.setSettings({ ...settings });
+    } catch {
+      /* keep local state */
+    }
+    renderList();
+    void pollCodes();
+  };
 
   const gearB = iconBtn("gear", t("main.settings"));
   gearB.onclick = () => openSettingsModal();
@@ -854,7 +955,7 @@ function renderMain() {
     void pollCodes();
   };
 
-  top.append(sbox, viewB, eyeAll, addB, importB, exportB, gearB, lockB);
+  top.append(sbox, gsel, groupB, viewB, eyeAll, addB, gearB, lockB);
 
   listHost = el("div", "list");
   app.append(top, listHost);
@@ -945,6 +1046,14 @@ function openAddModal() {
     const secret = el("input") as HTMLInputElement;
     secret.placeholder = t("add.manual.secret.ph");
     secret.style.fontFamily = "var(--mono)";
+    const group = el("input") as HTMLInputElement;
+    group.placeholder = t("group.placeholder");
+    group.setAttribute("list", "authio-groups-add");
+    const gdl = el("datalist") as HTMLDataListElement;
+    gdl.id = "authio-groups-add";
+    for (const g of [...new Set(accounts.map((a) => a.group).filter((g) => g))]) {
+      gdl.append(new Option(g, g));
+    }
     const kind = el("select") as HTMLSelectElement;
     kind.append(new Option("TOTP (time-based)", "totp"), new Option("HOTP (counter-based)", "hotp"));
     const algo = el("select") as HTMLSelectElement;
@@ -961,7 +1070,7 @@ function openAddModal() {
     counter.min = "0";
     counter.value = "0";
 
-    const fKind = field(t("manual.type"), kind);
+    const fKind = field(t("add.manual.type"), kind);
     const fPeriod = field(t("add.manual.period"), period);
     const fCounter = field(t("add.manual.counter"), counter);
     const rowKind = el("div", "row2");
@@ -985,6 +1094,7 @@ function openAddModal() {
           issuer: issuer.value,
           name: name.value,
           secret: secret.value,
+          group: group.value,
           algorithm: algo.value,
           digits: Number(digits.value),
           period: Number(period.value || 30),
@@ -1002,6 +1112,8 @@ function openAddModal() {
     host.append(
       field(t("add.manual.issuer"), issuer),
       field(t("add.manual.name"), name),
+      field(t("group.label"), group),
+      gdl,
       field(t("add.manual.secret"), secret),
       rowKind,
       rowNums,
@@ -1440,6 +1552,35 @@ function openSettingsModal() {
     void pollCodes();
   };
 
+  // countdown number inside the timer ring
+  const numSw = el("input", "switch") as HTMLInputElement;
+  numSw.type = "checkbox";
+  numSw.checked = settings.show_timer_number;
+  numSw.onchange = () => {
+    settings.show_timer_number = numSw.checked;
+    void save();
+    renderList();
+    void pollCodes();
+  };
+
+  // ---- data: import / export live here in settings
+  const dataTitle = el("div", "section-label", t("settings.data"));
+  dataTitle.style.margin = "10px 0 0";
+  const impB = el("button", "btn", t("main.import"));
+  impB.prepend(icon("download"));
+  impB.onclick = () => {
+    h.close();
+    openImportModal();
+  };
+  const expB = el("button", "btn", t("main.export"));
+  expB.prepend(icon("upload"));
+  expB.onclick = () => {
+    h.close();
+    openExportModal();
+  };
+  const dataActions = el("div", "data-actions");
+  dataActions.append(impB, expB);
+
   // ---- security: change unlock method / master password
   const secTitle = el("div", "section-label", t("settings.security"));
   secTitle.style.margin = "10px 0 0";
@@ -1462,8 +1603,11 @@ function openSettingsModal() {
     mkRow(t("settings.view"), null, viewSel),
     mkRow(t("settings.sort_alpha"), null, alphaSw),
     mkRow(t("settings.hide_codes"), null, hideSw),
+    mkRow(t("settings.timer_number"), null, numSw),
     mkRow(t("settings.autolock"), t("settings.autolock.off"), lockWrap),
     mkRow(t("settings.lock_minimize"), null, minSw),
+    dataTitle,
+    dataActions,
     secTitle,
     mkRow(t("settings.unlock_method"), null, modeWrap),
     el("div", "about", t("settings.about", { v: "0.1.0" })),
@@ -1584,13 +1728,22 @@ function openEditModal(a: AccountDto) {
   issuer.value = a.issuer;
   const name = el("input") as HTMLInputElement;
   name.value = a.name;
+  const group = el("input") as HTMLInputElement;
+  group.value = a.group;
+  group.placeholder = t("group.placeholder");
+  group.setAttribute("list", "authio-groups-edit");
+  const gdl = el("datalist") as HTMLDataListElement;
+  gdl.id = "authio-groups-edit";
+  for (const g of [...new Set(accounts.map((x) => x.group).filter((g) => g))]) {
+    gdl.append(new Option(g, g));
+  }
   const err = el("div", "errline");
   const cancel = el("button", "btn", t("common.cancel"));
   cancel.onclick = () => h.close();
   const go = el("button", "btn primary", t("common.save"));
   go.onclick = async () => {
     try {
-      await api.updateAccount(a.id, issuer.value, name.value);
+      await api.updateAccount(a.id, issuer.value, name.value, group.value);
       toast(t("toast.updated"));
       h.close();
       await refresh();
@@ -1601,6 +1754,8 @@ function openEditModal(a: AccountDto) {
   h.body.append(
     field(t("add.manual.issuer"), issuer),
     field(t("add.manual.name"), name),
+    field(t("group.label"), group),
+    gdl,
     el("p", "hint", `${a.kind.toUpperCase()} · ${a.algorithm} · ${a.digits} digits${a.kind === "totp" ? ` · ${a.period}s` : ""}`),
     err,
   );

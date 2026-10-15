@@ -28,6 +28,7 @@ pub struct AccountDto {
     pub id: String,
     pub issuer: String,
     pub name: String,
+    pub group: String,
     pub pinned: bool,
     pub sort: u64,
     pub kind: String,
@@ -86,6 +87,7 @@ fn account_dto(a: &Account) -> AccountDto {
         id: a.id.clone(),
         issuer: a.issuer.clone(),
         name: a.name.clone(),
+        group: a.group.clone(),
         pinned: a.pinned,
         sort: a.sort,
         kind: match a.kind {
@@ -392,7 +394,20 @@ pub fn hotp_next(state: State<'_, Arc<AppState>>, id: String) -> Cmd<CodeDto> {
 
 #[tauri::command]
 pub fn add_account(state: State<'_, Arc<AppState>>, draft: DraftIn) -> Cmd<AccountDto> {
-    add_draft(&state, draft_from_input(draft)?)
+    let group = draft.group.clone().unwrap_or_default().trim().to_string();
+    let dto = add_draft(&state, draft_from_input(draft)?)?;
+    if !group.is_empty() {
+        with_session(&state, |s| {
+            let a = s.accounts.iter_mut().find(|a| a.id == dto.id).ok_or("account not found")?;
+            a.group = group;
+            Ok(())
+        })?;
+        persist(&state)?;
+    }
+    Ok(with_session(&state, |s| {
+        let a = s.accounts.iter().find(|a| a.id == dto.id).ok_or("account not found")?;
+        Ok(account_dto(a))
+    })?)
 }
 
 #[tauri::command]
@@ -406,7 +421,7 @@ pub fn add_from_uri(state: State<'_, Arc<AppState>>, uri: String) -> Cmd<Vec<Acc
 }
 
 #[tauri::command]
-pub fn update_account(state: State<'_, Arc<AppState>>, id: String, issuer: String, name: String) -> Cmd<()> {
+pub fn update_account(state: State<'_, Arc<AppState>>, id: String, issuer: String, name: String, group: String) -> Cmd<()> {
     with_session(&state, |s| {
         let a = s.accounts.iter_mut().find(|a| a.id == id).ok_or("account not found")?;
         if issuer.trim().is_empty() && name.trim().is_empty() {
@@ -414,6 +429,7 @@ pub fn update_account(state: State<'_, Arc<AppState>>, id: String, issuer: Strin
         }
         a.issuer = issuer.trim().to_string();
         a.name = name.trim().to_string();
+        a.group = group.trim().to_string();
         Ok(())
     })?;
     persist(&state)?;

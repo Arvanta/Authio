@@ -67,6 +67,8 @@ pub struct Account {
     pub id: String,
     pub issuer: String,
     pub name: String,
+    #[serde(default)]
+    pub group: String, // free-form group label; "" = ungrouped
     pub secret: Zeroizing<Vec<u8>>,
     #[serde(default)]
     pub algorithm: Algorithm,
@@ -132,6 +134,7 @@ impl Draft {
             id,
             issuer: self.issuer.trim().to_string(),
             name: self.name.trim().to_string(),
+            group: String::new(),
             secret: self.secret,
             algorithm: self.algorithm,
             digits: self.digits,
@@ -150,6 +153,7 @@ pub struct DraftIn {
     pub issuer: String,
     pub name: String,
     pub secret: String,
+    pub group: Option<String>,
     pub algorithm: Option<String>,
     pub digits: Option<u32>,
     pub period: Option<u32>,
@@ -173,8 +177,18 @@ pub struct Settings {
     pub auto_lock_minutes: u64, // 0 = disabled
     #[serde(default = "default_true")]
     pub lock_on_minimize: bool,
+    #[serde(default = "default_view_mode")]
+    pub view_mode: String, // "rows" | "tiles"
+    #[serde(default = "default_true")]
+    pub show_timer_number: bool,
+    #[serde(default)]
+    pub grouped_view: bool,
     #[serde(default)]
     pub window: Option<WindowGeo>,
+}
+
+fn default_view_mode() -> String {
+    "rows".into()
 }
 
 fn default_theme() -> String {
@@ -203,6 +217,9 @@ impl Default for Settings {
             hide_codes: true,
             auto_lock_minutes: default_lock_minutes(),
             lock_on_minimize: true,
+            view_mode: default_view_mode(),
+            show_timer_number: true,
+            grouped_view: false,
             window: None,
         }
     }

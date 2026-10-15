@@ -775,6 +775,115 @@ body[data-density="comfortable"] .code {
   color: var(--accent);
 }
 
+/* ---------- Global SVG fallbacks (icons must never stretch) ---------- */
+.mode-card .t svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.banner svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* ---------- Setup screen: keep everything reachable ---------- */
+.center-screen {
+  padding: 14px;
+}
+.center-screen .panel {
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+.mode-cards {
+  gap: 8px;
+}
+.mode-card {
+  padding: 9px 12px;
+}
+.mode-card .t {
+  font-size: 13px;
+}
+.mode-card .d {
+  font-size: 11.5px;
+}
+
+/* ---------- Kebab / dropdown menus ---------- */
+.menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 172px;
+  background: var(--flyout);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: var(--shadow-16);
+  padding: 4px;
+}
+.menu .mi {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 9px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.menu .mi:hover {
+  background: var(--card-soft);
+}
+.menu .mi svg {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.menu .mi.danger {
+  color: var(--danger);
+}
+.menu .mi.danger svg {
+  color: var(--danger);
+}
+
+/* ---------- Topbar: group filter select + state icons ---------- */
+.gsel {
+  max-width: 132px;
+  padding: 5px 8px;
+  font-size: 12px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.iconbtn.on {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* ---------- Settings: data actions row ---------- */
+.data-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+.data-actions .btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
 /* ---------- Danger banner variant ---------- */
 .banner.danger {
   color: var(--danger);

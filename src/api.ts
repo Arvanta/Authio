@@ -7,6 +7,7 @@ export interface AccountDto {
   id: string;
   issuer: string;
   name: string;
+  group: string; // "" = ungrouped
   pinned: boolean;
   sort: number;
   kind: "totp" | "hotp" | string;
@@ -60,7 +61,9 @@ export interface Settings {
   hide_codes: boolean;
   auto_lock_minutes: number;
   lock_on_minimize: boolean;
-  view_mode?: "rows" | "tiles" | string;
+  view_mode: "rows" | "tiles" | string;
+  show_timer_number: boolean;
+  grouped_view: boolean;
   window?: { x: number; y: number; w: number; h: number } | null;
 }
 
@@ -68,6 +71,7 @@ export interface DraftIn {
   issuer: string;
   name: string;
   secret: string;
+  group?: string;
   algorithm?: string;
   digits?: number;
   period?: number;
@@ -93,8 +97,8 @@ export const api = {
   hotpNext: (id: string) => invoke<CodeDto>("hotp_next", { id }),
   addAccount: (draft: DraftIn) => invoke<AccountDto>("add_account", { draft }),
   addFromUri: (uri: string) => invoke<AccountDto[]>("add_from_uri", { uri }),
-  updateAccount: (id: string, issuer: string, name: string) =>
-    invoke<void>("update_account", { id, issuer, name }),
+  updateAccount: (id: string, issuer: string, name: string, group: string) =>
+    invoke<void>("update_account", { id, issuer, name, group }),
   deleteAccount: (id: string) => invoke<void>("delete_account", { id }),
   setPinned: (id: string, pinned: boolean) => invoke<void>("set_pinned", { id, pinned }),
   reorder: (ids: string[]) => invoke<void>("reorder", { ids }),

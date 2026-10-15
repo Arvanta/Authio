@@ -140,7 +140,10 @@ fn save_window_geo(state: &Arc<AppState>, win: &tauri::WebviewWindow, force: boo
     if win.is_minimized().unwrap_or(false) {
         return;
     }
-    let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) else {
+    // Save the INNER size — restore applies it with set_size() (also inner), so
+    // using outer_size here would grow the window by the decoration size on
+    // every launch.
+    let (Ok(pos), Ok(size)) = (win.outer_position(), win.inner_size()) else {
         return;
     };
     if size.width < 100 || size.height < 100 {
