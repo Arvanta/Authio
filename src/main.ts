@@ -185,6 +185,7 @@ let settings: Settings = {
   view_mode: "rows",
   show_timer_number: true,
   grouped_view: false,
+  tray: true,
 };
 let accounts: AccountDto[] = [];
 let search = "";
@@ -303,6 +304,9 @@ function renderSetup() {
     try {
       await api.setupVault(mode, mode === "password" ? pw1.value : undefined);
       pw1.value = pw2.value = "";
+      // Refresh status so the UI (settings security section, lock screen)
+      // immediately knows the freshly chosen unlock mode.
+      await refreshStatus();
       await enterMain();
     } catch (e) {
       err.textContent = fmtError(e);
@@ -1161,7 +1165,7 @@ function openImportModal() {
       pick.onclick = async () => {
         const path = await open({
           multiple: false,
-          filters: [{ name: "Backups", extensions: ["json", "txt", "authme", "aegis"] }],
+          filters: [{ name: "Backups", extensions: ["json", "txt", "csv", "2fas", "authme", "aegis"] }],
         });
         if (!path || typeof path !== "string") return;
         try {
@@ -1437,7 +1441,9 @@ function openExportModal() {
 }
 
 /*------------------------------------------------------------- settings modal */
-function openSettingsModal() {
+async function openSettingsModal() {
+  // Always show the security section against fresh backend state.
+  await refreshStatus().catch(() => undefined);
   const h = openModal(t("settings.title"));
 
   const save = async () => {
@@ -1541,6 +1547,15 @@ function openSettingsModal() {
     void save();
   };
 
+  // system tray
+  const traySw = el("input", "switch") as HTMLInputElement;
+  traySw.type = "checkbox";
+  traySw.checked = settings.tray;
+  traySw.onchange = () => {
+    settings.tray = traySw.checked;
+    void save();
+  };
+
   // view style (rows / tiles)
   const viewSel = el("select") as HTMLSelectElement;
   viewSel.append(new Option(t("settings.view.rows"), "rows"), new Option(t("settings.view.tiles"), "tiles"));
@@ -1606,6 +1621,7 @@ function openSettingsModal() {
     mkRow(t("settings.timer_number"), null, numSw),
     mkRow(t("settings.autolock"), t("settings.autolock.off"), lockWrap),
     mkRow(t("settings.lock_minimize"), null, minSw),
+    mkRow(t("settings.tray"), null, traySw),
     dataTitle,
     dataActions,
     secTitle,

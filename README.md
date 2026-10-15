@@ -32,6 +32,11 @@
 | **Google Authenticator** | ✅ `otpauth-migration://` QR/URI | built-in protobuf parser |
 | **Aegis** | ✅ plain & encrypted vault | scrypt + AES-256-GCM slots |
 | **Authme** | ✅ export JSON | tolerant field mapping |
+| **2FAS** | ✅ plain backup JSON | encrypted 2FAS exports are rejected with a hint |
+| **andOTP** | ✅ plain backup JSON | |
+| **Raivo** | ✅ `raivo-otp-export.json` | |
+| **Bitwarden** | ✅ vault-export CSV (`login_totp`) | TOTP URIs or raw seeds |
+| **Steam (maFile)** | ✅ SDA `shared_secret` JSON | imported as Steam-style 5-character codes |
 | **otpauth lines** | ✅ lists of URIs | |
 | **Export** | encrypted (recommended) or plain JSON, your choice | plain export requires explicit acknowledgement |
 
@@ -91,7 +96,7 @@ Authio/
 
 ## Roadmap
 
-See [`docs/SPEC.md`](docs/SPEC.md) — next up: offline service icon pack, Windows Hello unlock, system tray, additional importers (2FAS, Raivo), auto-backup, Farsi/RTL localization.
+See [`docs/SPEC.md`](docs/SPEC.md) — next up: Windows Hello unlock, webcam QR scan, Farsi/RTL localization, local-first sync.
 
 ## License
 

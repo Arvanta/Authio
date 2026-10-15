@@ -6,7 +6,7 @@
 //!  - `get_codes` is the only command that returns OTP codes; it does not count
 //!    as user activity, so polling never defeats auto-lock.
 
-use crate::model::{now_unix, Account, Algorithm, Draft, DraftIn, Kind, Settings};
+use crate::model::{now_unix, Account, Algorithm, Draft, DraftIn, Flavor, Kind, Settings};
 use crate::otpauth::{b32_decode, b32_encode};
 use crate::state::{AppState, PendingImport, Session};
 use crate::vault::{self, Kdf};
@@ -36,6 +36,7 @@ pub struct AccountDto {
     pub digits: u32,
     pub period: u32,
     pub counter: u64,
+    pub flavor: String,
 }
 
 #[derive(Serialize)]
@@ -100,6 +101,8 @@ fn account_dto(a: &Account) -> AccountDto {
         counter: match a.kind {
             Kind::Hotp { counter } => counter,
             _ => 0,
+        },
+        flavor: a.flavor.as_str().into(),
         },
     }
 }
@@ -166,18 +169,28 @@ fn vault_mode(state: &AppState) -> Cmd<String> {
 }
 
 fn draft_from_input(input: DraftIn) -> Cmd<Draft> {
+    let flavor = match input.flavor.as_deref() {
+        None | Some("") => Flavor::Standard,
+        Some(f) => Flavor::parse(f).ok_or_else(|| "unknown flavor (expected standard or steam)".to_string())?,
+    };
     let kind = match input.kind.as_deref().unwrap_or("totp") {
-        "hotp" => Kind::Hotp { counter: input.counter.unwrap_or(0) },
+        "hotp" if flavor != Flavor::Steam => Kind::Hotp { counter: input.counter.unwrap_or(0) },
         _ => Kind::Totp,
     };
     let d = Draft {
         issuer: input.issuer.trim().to_string(),
         name: input.name.trim().to_string(),
         secret: Zeroizing::new(b32_decode(&input.secret)?),
-        algorithm: input.algorithm.as_deref().and_then(Algorithm::parse).unwrap_or_default(),
-        digits: input.digits.unwrap_or(6),
-        period: input.period.unwrap_or(30),
+        algorithm: if flavor == Flavor::Steam {
+            Algorithm::SHA1
+        } else {
+            input.algorithm.as_deref().and_then(Algorithm::parse).unwrap_or_default()
+        },
+        digits: if flavor == Flavor::Steam { 5 } else { input.digits.unwrap_or(6) },
+        period: if flavor == Flavor::Steam { 30 } else { input.period.unwrap_or(30) },
         kind,
+        flavor,
+        group: input.group.clone().unwrap_or_default().trim().to_string(),
     };
     d.validate()?;
     Ok(d)
@@ -365,7 +378,11 @@ pub fn get_codes(state: State<'_, Arc<AppState>>) -> Cmd<Vec<CodeDto>> {
             .iter()
             .map(|a| match a.kind {
                 Kind::Totp => {
-                    let (code, remaining, progress) = otp::totp(&a.secret, a.period, a.digits, a.algorithm, now);
+                    let (code, remaining, progress) = if a.flavor == Flavor::Steam {
+                        otp::totp_steam(&a.secret, now)
+                    } else {
+                        otp::totp(&a.secret, a.period, a.digits, a.algorithm, now)
+                    };
                     CodeDto { id: a.id.clone(), code: Some(code), remaining, progress }
                 }
                 Kind::Hotp { .. } => CodeDto { id: a.id.clone(), code: None, remaining: 0, progress: 0.0 },
@@ -394,20 +411,7 @@ pub fn hotp_next(state: State<'_, Arc<AppState>>, id: String) -> Cmd<CodeDto> {
 
 #[tauri::command]
 pub fn add_account(state: State<'_, Arc<AppState>>, draft: DraftIn) -> Cmd<AccountDto> {
-    let group = draft.group.clone().unwrap_or_default().trim().to_string();
-    let dto = add_draft(&state, draft_from_input(draft)?)?;
-    if !group.is_empty() {
-        with_session(&state, |s| {
-            let a = s.accounts.iter_mut().find(|a| a.id == dto.id).ok_or("account not found")?;
-            a.group = group;
-            Ok(())
-        })?;
-        persist(&state)?;
-    }
-    Ok(with_session(&state, |s| {
-        let a = s.accounts.iter().find(|a| a.id == dto.id).ok_or("account not found")?;
-        Ok(account_dto(a))
-    })?)
+    add_draft(&state, draft_from_input(draft)?)
 }
 
 #[tauri::command]
@@ -502,6 +506,8 @@ pub fn reveal_secret(state: State<'_, Arc<AppState>>, id: String, password: Opti
 struct BackupAccountOut {
     issuer: String,
     name: String,
+    group: String,
+    flavor: String,
     secret: String,
     algorithm: String,
     digits: u32,
@@ -544,6 +550,8 @@ pub fn export_backup(
             .map(|a| BackupAccountOut {
                 issuer: a.issuer.clone(),
                 name: a.name.clone(),
+                group: a.group.clone(),
+                flavor: a.flavor.as_str().into(),
                 secret: b32_encode(&a.secret),
                 algorithm: a.algorithm.as_str().into(),
                 digits: a.digits,
@@ -683,14 +691,19 @@ pub fn get_settings(state: State<'_, Arc<AppState>>) -> Settings {
 }
 
 #[tauri::command]
-pub fn set_settings(state: State<'_, Arc<AppState>>, mut settings: Settings) -> Cmd<()> {
+pub fn set_settings(app: tauri::AppHandle, state: State<'_, Arc<AppState>>, mut settings: Settings) -> Cmd<()> {
     settings.font_scale = settings.font_scale.clamp(80, 140);
     settings.auto_lock_minutes = settings.auto_lock_minutes.min(240);
+    let tray_enabled = settings.tray;
     {
         let mut guard = state.settings.lock().map_err(|_| "internal error (state lock)".to_string())?;
         // Never let the UI overwrite the persisted window geometry.
         settings.window = guard.window;
         *guard = settings;
+    }
+    // Apply the tray toggle immediately (no restart needed).
+    if let Some(tray) = app.tray_by_id("authio-tray") {
+        let _ = tray.set_visible(tray_enabled);
     }
     state.save_settings();
     state.touch();

@@ -130,6 +130,8 @@ fn parse_otp_parameters(buf: &[u8]) -> Result<Draft, String> {
         digits,
         period: 30,
         kind: if is_totp { Kind::Totp } else { Kind::Hotp { counter } },
+        flavor: crate::model::Flavor::Standard,
+        group: String::new(),
     };
     draft.validate()?;
     Ok(draft)

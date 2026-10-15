@@ -22,9 +22,61 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+            // Portable mode: `--portable` keeps vault + settings next to the exe
+            // (USB-stick scenario) instead of %APPDATA%.
+            let portable = std::env::args().any(|a| a.eq_ignore_ascii_case("--portable"));
+            let dir = if portable {
+                std::env::current_exe()
+                    .ok()
+                    .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+                    .map(|d| d.join("authio-data"))
+                    .ok_or("could not resolve the executable directory for portable mode")?
+            } else {
+                app.path().app_data_dir().map_err(|e| e.to_string())?
+            };
             let state = Arc::new(AppState::new(dir));
             app.manage(state.clone());
+
+            // System tray (visible unless disabled in settings).
+            {
+                use tauri::menu::MenuBuilder;
+                use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+                let tray_enabled = state.settings.lock().map(|s| s.tray).unwrap_or(true);
+                let menu = MenuBuilder::new(app)
+                    .text("show", "Show Authio")
+                    .text("lock", "Lock")
+                    .separator()
+                    .text("quit", "Quit")
+                    .build()?;
+                TrayIconBuilder::with_id("authio-tray")
+                    .tooltip("Authio")
+                    .icon(app.default_window_icon().expect("window icon missing").clone())
+                    .menu(&menu)
+                    .show_menu_on_left_click(false)
+                    .visible(tray_enabled)
+                    .on_menu_event(|app, event| match event.id().as_ref() {
+                        "show" => show_main_window(app),
+                        "lock" => {
+                            if let Some(s) = app.try_state::<Arc<AppState>>() {
+                                s.do_lock();
+                            }
+                        }
+                        "quit" => app.exit(0),
+                        _ => {}
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            show_main_window(tray.app_handle());
+                        }
+                    })
+                    .build(app)?;
+            }
 
             let win = app.get_webview_window("main").ok_or("main window missing")?;
 
@@ -47,7 +99,15 @@ pub fn run() {
                     WindowEvent::Resized(_) | WindowEvent::Moved(_) => {
                         save_window_geo(&state_e, &win_e, false)
                     }
-                    WindowEvent::CloseRequested { .. } => save_window_geo(&state_e, &win_e, true),
+                    WindowEvent::CloseRequested { api, .. } => {
+                        save_window_geo(&state_e, &win_e, true);
+                        // With the tray enabled, closing hides the window instead of quitting.
+                        let tray_on = state_e.settings.lock().map(|s| s.tray).unwrap_or(false);
+                        if tray_on {
+                            api.prevent_close();
+                            let _ = win_e.hide();
+                        }
+                    }
                     WindowEvent::Destroyed => state_e.do_lock(),
                     _ => {}
                 });
@@ -125,6 +185,15 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Authio");
+}
+
+/// Bring the main window back from minimized / hidden (tray) state.
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
 }
 
 fn save_window_geo(state: &Arc<AppState>, win: &tauri::WebviewWindow, force: bool) {

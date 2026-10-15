@@ -1,6 +1,6 @@
 //! `otpauth://` URI parsing & serialization, plus tolerant Base32 handling.
 
-use crate::model::{Account, Algorithm, Draft, Kind};
+use crate::model::{Account, Algorithm, Draft, Flavor, Kind};
 use data_encoding::BASE32_NOPAD;
 use zeroize::Zeroizing;
 
@@ -99,14 +99,20 @@ pub fn parse_otpauth(uri: &str) -> Result<Draft, String> {
     // The issuer parameter, when present, wins over the label prefix.
     let issuer = get("issuer").filter(|i| !i.trim().is_empty()).unwrap_or(label_issuer);
 
+    // Steam Guard entries (shared secret in base64 style URIs with
+    // issuer=Steam) use Steam's 5-character alphabet rendering.
+    let is_steam = issuer.trim().eq_ignore_ascii_case("steam");
+
     let draft = Draft {
         issuer: issuer.trim().to_string(),
         name: label_name,
         secret: Zeroizing::new(secret),
-        algorithm,
-        digits,
-        period,
-        kind: if is_hotp { Kind::Hotp { counter } } else { Kind::Totp },
+        algorithm: if is_steam { Algorithm::SHA1 } else { algorithm },
+        digits: if is_steam { 5 } else { digits },
+        period: if is_steam { 30 } else { period },
+        kind: if is_hotp && !is_steam { Kind::Hotp { counter } } else { Kind::Totp },
+        flavor: if is_steam { Flavor::Steam } else { Flavor::Standard },
+        group: String::new(),
     };
     draft.validate()?;
     Ok(draft)

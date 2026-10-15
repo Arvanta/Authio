@@ -164,6 +164,7 @@
     "hide_codes": "Hide codes until revealed",
     "autolock": "Auto-lock after inactivity",
     "lock_minimize": "Lock when window is minimized",
+    "tray": "Run in system tray (the close button minimizes to tray instead of quitting)",
     "security": "Security",
     "data": "Data",
     "unlock_method": "Unlock method",

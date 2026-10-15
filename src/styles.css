@@ -884,6 +884,34 @@ body[data-density="comfortable"] .code {
   gap: 6px;
 }
 
+/* ---------- Timer ring: perfect inner-number centering ---------- */
+.timercol {
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.timercol .ring {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  position: static;
+  transform: rotate(-90deg);
+}
+.timercol .remain {
+  grid-area: 1 / 1;
+  position: static;
+  margin: 0;
+  letter-spacing: 0;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Tiles footer: vertically center the icon row ---------- */
+.tile .t-foot {
+  margin-top: 4px;
+  padding: 5px 6px 9px;
+}
+
 /* ---------- Danger banner variant ---------- */
 .banner.danger {
   color: var(--danger);

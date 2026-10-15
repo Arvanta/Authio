@@ -69,6 +69,8 @@ pub struct Account {
     pub name: String,
     #[serde(default)]
     pub group: String, // free-form group label; "" = ungrouped
+    #[serde(default)]
+    pub flavor: Flavor,
     pub secret: Zeroizing<Vec<u8>>,
     #[serde(default)]
     pub algorithm: Algorithm,
@@ -94,6 +96,32 @@ impl Account {
 }
 
 /// An incoming account (manual entry, QR, import) before it is stored.
+/// Code flavor for issuers with non-standard token rendering.
+/// `Standard` follows RFC 6238 digit output; `Steam` renders 5 characters
+/// from Steam's custom alphabet (same HMAC-SHA1/30s core).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub enum Flavor {
+    #[default]
+    Standard,
+    Steam,
+}
+
+impl Flavor {
+    pub fn parse(s: &str) -> Option<Flavor> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "standard" | "" => Some(Flavor::Standard),
+            "steam" => Some(Flavor::Steam),
+            _ => None,
+        }
+    }
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Flavor::Standard => "standard",
+            Flavor::Steam => "steam",
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Draft {
     pub issuer: String,
@@ -107,6 +135,11 @@ pub struct Draft {
     pub period: u32,
     #[serde(default = "totp_kind")]
     pub kind: Kind,
+    #[serde(default)]
+    pub flavor: Flavor,
+    /// Optional group label carried through backups; "" = ungrouped.
+    #[serde(default)]
+    pub group: String,
 }
 
 impl Draft {
@@ -134,12 +167,13 @@ impl Draft {
             id,
             issuer: self.issuer.trim().to_string(),
             name: self.name.trim().to_string(),
-            group: String::new(),
             secret: self.secret,
             algorithm: self.algorithm,
             digits: self.digits,
             period: if self.period == 0 { 30 } else { self.period },
             kind: self.kind,
+            flavor: self.flavor,
+            group: self.group.trim().to_string(),
             pinned: false,
             sort,
             created_at,
@@ -183,6 +217,8 @@ pub struct Settings {
     pub show_timer_number: bool,
     #[serde(default)]
     pub grouped_view: bool,
+    #[serde(default = "default_true")]
+    pub tray: bool,
     #[serde(default)]
     pub window: Option<WindowGeo>,
 }
@@ -220,6 +256,7 @@ impl Default for Settings {
             view_mode: default_view_mode(),
             show_timer_number: true,
             grouped_view: false,
+            tray: true,
             window: None,
         }
     }

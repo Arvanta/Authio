@@ -57,9 +57,52 @@ pub fn totp(
     (code, remaining, progress)
 }
 
+/// Steam's non-standard TOTP variant: five characters from its proprietary
+/// 26-symbol alphabet over the vanilla HMAC-SHA1/30-second core. Steam
+/// publishes no official vectors; this matches the de-facto reference
+/// implementations and is snapshot-tested below.
+const STEAM_ALPHABET: &[u8; 26] = b"23456789BCDFGHJKMNPQRTVWXY";
+
+pub fn totp_steam(secret: &[u8], unix_time: u64) -> (String, u64, f64) {
+    const PERIOD: u64 = 30;
+    let counter = unix_time / PERIOD;
+    let mac = hmac_digest(Algorithm::SHA1, secret, &counter.to_be_bytes());
+    let offset = (mac[mac.len() - 1] & 0x0f) as usize;
+    let mut value = (((mac[offset] as u32 & 0x7f) << 24)
+        | ((mac[offset + 1] as u32) << 16)
+        | ((mac[offset + 2] as u32) << 8)
+        | (mac[offset + 3] as u32)) as u64;
+    let mut code = String::with_capacity(5);
+    for _ in 0..5 {
+        code.push(STEAM_ALPHABET[(value % 26) as usize] as char);
+        value /= 26;
+    }
+    let remaining = PERIOD - (unix_time % PERIOD);
+    (code, remaining, remaining as f64 / PERIOD as f64)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn steam_totp_shape_and_alphabet() {
+        for t in [0u64, 59, 1_111_111_111, 1_234_567_890, 2_000_000_000] {
+            let (code, remaining, progress) = totp_steam(b"12345678901234567890", t);
+            assert_eq!(code.len(), 5);
+            assert!(code.bytes().all(|b| STEAM_ALPHABET.contains(&b)));
+            assert_eq!(remaining, 30 - (t % 30));
+            assert!((progress - remaining as f64 / 30.0).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn steam_totp_snapshot() {
+        // Snapshot of the same RFC 6238 secret used in the vectors above, so a
+        // regression in truncation or alphabet mapping fails loudly.
+        let (code, _, _) = totp_steam(b"12345678901234567890", 1_234_567_890);
+        assert_eq!(code, "VHHQY");
+    }
 
     #[test]
     fn rfc4226_hotp_vectors() {

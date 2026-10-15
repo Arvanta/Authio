@@ -4,7 +4,7 @@
 
 use crate::crypto;
 use crate::migration;
-use crate::model::{Algorithm, Draft, Kind};
+use crate::model::{Algorithm, Draft, Flavor, Kind};
 use crate::otpauth::{self, b32_decode};
 use crate::vault::{self, Kdf};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
@@ -42,6 +42,9 @@ pub fn parse_text(text: &str, password: Option<&str>) -> Result<ImportOutcome, S
     }
     if t.starts_with('{') || t.starts_with('[') {
         return parse_json(t, password);
+    }
+    if looks_like_bitwarden_csv(t) {
+        return import_bitwarden_csv(t);
     }
     if t.lines().any(|l| l.trim_start().starts_with("otpauth://")) {
         let mut drafts = Vec::new();
@@ -86,10 +89,41 @@ fn parse_json(t: &str, password: Option<&str>) -> Result<ImportOutcome, String> 
     if v.get("header").is_some() && v.get("db").is_some() {
         return import_aegis(&v, password);
     }
-    if v.get("secrets").is_some() || v.is_array() {
-        return import_authme(&v);
+    if v.get("servicesEncrypted").is_some() {
+        return Err("encrypted 2FAS backups are not supported — export from 2FAS without a password".into());
     }
-    Err("unsupported JSON format (not Authio, Aegis, or Authme)".into())
+    if let Some(s) = v.get("services") {
+        if s.is_array() {
+            return import_2fas(&v);
+        }
+    }
+    if v.get("shared_secret").is_some() {
+        return import_steam_mafile(&v);
+    }
+    if v.get("secrets").is_some() || v.is_array() {
+        import_dispatch_array(&v)
+    } else {
+        Err("unsupported JSON format (not Authio, Aegis, Authme, 2FAS, Raivo, andOTP, or a Steam maFile)".into())
+    }
+}
+
+/// Free-form JSON arrays: pick the concrete importer by the first entry's
+/// field signature — Raivo ("kind"), andOTP ("label"+"type"), else Authme's
+/// tolerant mapping.
+fn import_dispatch_array(v: &serde_json::Value) -> Result<ImportOutcome, String> {
+    let arr = if let Some(s) = v.get("secrets") {
+        s.as_array().ok_or("Authme export: 'secrets' is not an array")?
+    } else {
+        v.as_array().ok_or("expected a JSON array of accounts")?
+    };
+    let first = arr.first();
+    if first.is_some_and(|e| e.get("kind").is_some()) {
+        return import_raivo(arr);
+    }
+    if first.is_some_and(|e| e.get("label").is_some() && e.get("type").is_some()) {
+        return import_andotp(arr);
+    }
+    import_authme_entries(arr)
 }
 
 // ---------------------------------------------------------------------------
@@ -101,6 +135,10 @@ struct BackupAccount {
     issuer: String,
     #[serde(default)]
     name: String,
+    #[serde(default)]
+    group: Option<String>,
+    #[serde(default)]
+    flavor: Option<String>,
     secret: String,
     #[serde(default)]
     algorithm: Option<String>,
@@ -116,18 +154,28 @@ struct BackupAccount {
 
 impl BackupAccount {
     fn to_draft(&self) -> Result<Draft, String> {
+        let flavor = match self.flavor.as_deref() {
+            None | Some("") => Flavor::Standard, // old backups predate the field
+            Some(f) => Flavor::parse(f).ok_or_else(|| "unknown account flavor in backup".to_string())?,
+        };
         let d = Draft {
             issuer: self.issuer.clone(),
             name: self.name.clone(),
             secret: Zeroizing::new(b32_decode(&self.secret)?),
-            algorithm: self.algorithm.as_deref().and_then(Algorithm::parse).unwrap_or_default(),
-            digits: self.digits.unwrap_or(6),
-            period: self.period.unwrap_or(30),
+            algorithm: if flavor == Flavor::Steam {
+                Algorithm::SHA1
+            } else {
+                self.algorithm.as_deref().and_then(Algorithm::parse).unwrap_or_default()
+            },
+            digits: if flavor == Flavor::Steam { 5 } else { self.digits.unwrap_or(6) },
+            period: if flavor == Flavor::Steam { 30 } else { self.period.unwrap_or(30) },
             kind: if self.kind.as_deref() == Some("hotp") {
                 Kind::Hotp { counter: self.counter.unwrap_or(0) }
             } else {
                 Kind::Totp
             },
+            flavor,
+            group: self.group.clone().unwrap_or_default(),
         };
         d.validate()?;
         Ok(d)
@@ -323,6 +371,8 @@ fn parse_aegis_db(db_val: serde_json::Value, format: &str) -> Result<ImportOutco
                 } else {
                     Kind::Totp
                 },
+                flavor: Flavor::Standard,
+                group: String::new(),
             };
             d.validate()?;
             Ok(d)
@@ -341,12 +391,7 @@ fn parse_aegis_db(db_val: serde_json::Value, format: &str) -> Result<ImportOutco
 // ---------------------------------------------------------------------------
 // Authme (https://authme.levminer.com) — tolerant shape detection
 
-fn import_authme(v: &serde_json::Value) -> Result<ImportOutcome, String> {
-    let arr: &Vec<serde_json::Value> = if let Some(s) = v.get("secrets") {
-        s.as_array().ok_or("Authme export: 'secrets' is not an array")?
-    } else {
-        v.as_array().ok_or("Authme export is not an array")?
-    };
+fn import_authme_entries(arr: &[serde_json::Value]) -> Result<ImportOutcome, String> {
     let mut drafts = Vec::new();
     let mut skipped = 0;
     for e in arr {
@@ -372,6 +417,8 @@ fn import_authme(v: &serde_json::Value) -> Result<ImportOutcome, String> {
                 digits,
                 period: 30,
                 kind: Kind::Totp,
+                flavor: Flavor::Standard,
+                group: String::new(),
             };
             d.validate()?;
             Ok(d)
@@ -388,10 +435,366 @@ fn import_authme(v: &serde_json::Value) -> Result<ImportOutcome, String> {
 }
 
 // ---------------------------------------------------------------------------
+// 2FAS (https://2fas.com) — plain backup JSON (encrypted exports are rejected
+// earlier with a dedicated message)
+
+fn import_2fas(v: &serde_json::Value) -> Result<ImportOutcome, String> {
+    let services = v
+        .get("services")
+        .and_then(|s| s.as_array())
+        .ok_or("2FAS backup has no services array")?;
+    let mut drafts = Vec::new();
+    let mut skipped = 0;
+    for svc in services {
+        let res: Result<Draft, String> = (|| {
+            let secret = svc.get("secret").and_then(|s| s.as_str()).ok_or("missing secret")?;
+            let otp = svc.get("otp").cloned().unwrap_or(serde_json::Value::Null);
+            let otp_str = |k: &str| otp.get(k).and_then(|x| x.as_str()).map(|s| s.to_string());
+            let otp_num = |k: &str, d: u32| -> u32 {
+                otp.get(k).and_then(|x| x.as_u64()).map(|x| x as u32).unwrap_or(d)
+            };
+            let svc_name = svc.get("name").and_then(|s| s.as_str()).unwrap_or("").trim().to_string();
+            let is_hotp = otp_str("tokenType").map(|t| t.eq_ignore_ascii_case("hotp")).unwrap_or(false);
+            let d = Draft {
+                issuer: otp_str("issuer").filter(|i| !i.trim().is_empty()).unwrap_or_else(|| svc_name.clone()),
+                name: otp_str("account").filter(|a| !a.trim().is_empty()).unwrap_or(svc_name),
+                secret: Zeroizing::new(b32_decode(secret)?),
+                algorithm: otp_str("algorithm").and_then(|a| Algorithm::parse(&a)).unwrap_or_default(),
+                digits: otp_num("digits", 6),
+                period: otp_num("period", 30),
+                kind: if is_hotp { Kind::Hotp { counter: otp.get("counter").and_then(|c| c.as_u64()).unwrap_or(0) } } else { Kind::Totp },
+                flavor: Flavor::Standard,
+                group: String::new(),
+            };
+            d.validate()?;
+            Ok(d)
+        })();
+        match res {
+            Ok(d) => drafts.push(d),
+            Err(_) => skipped += 1,
+        }
+    }
+    if drafts.is_empty() {
+        return Err("no valid accounts found in 2FAS backup".into());
+    }
+    Ok(ImportOutcome::ok("2fas", drafts, skipped))
+}
+
+// ---------------------------------------------------------------------------
+// andOTP (https://github.com/andOTP) — plain backup: JSON array with
+// { secret, issuer, label, type, algorithm, digits, period, counter }
+
+fn import_andotp(arr: &[serde_json::Value]) -> Result<ImportOutcome, String> {
+    let mut drafts = Vec::new();
+    let mut skipped = 0;
+    for e in arr {
+        let res: Result<Draft, String> = (|| {
+            let strf = |k: &str| e.get(k).and_then(|x| x.as_str()).map(|s| s.to_string());
+            let num = |k: &str, d: u32| e.get(k).and_then(|x| x.as_u64()).map(|x| x as u32).unwrap_or(d);
+            let is_hotp = strf("type").map(|t| t.eq_ignore_ascii_case("hotp")).unwrap_or(false);
+            let d = Draft {
+                issuer: strf("issuer").unwrap_or_default().trim().to_string(),
+                name: strf("label").unwrap_or_default().trim().to_string(),
+                secret: Zeroizing::new(b32_decode(&strf("secret").ok_or("missing secret")?)?),
+                algorithm: strf("algorithm").and_then(|a| Algorithm::parse(&a)).unwrap_or_default(),
+                digits: num("digits", 6),
+                period: num("period", 30),
+                kind: if is_hotp { Kind::Hotp { counter: e.get("counter").and_then(|c| c.as_u64()).unwrap_or(0) } } else { Kind::Totp },
+                flavor: Flavor::Standard,
+                group: String::new(),
+            };
+            d.validate()?;
+            Ok(d)
+        })();
+        match res {
+            Ok(d) => drafts.push(d),
+            Err(_) => skipped += 1,
+        }
+    }
+    if drafts.is_empty() {
+        return Err("no valid accounts found in andOTP backup (encrypted andOTP exports are unsupported)".into());
+    }
+    Ok(ImportOutcome::ok("andotp", drafts, skipped))
+}
+
+// ---------------------------------------------------------------------------
+// Raivo (iOS) — raivo-otp-export.json: array with numeric fields as STRINGS:
+// { kind, account, secret, issuer, timer, digits, counter, algorithm }
+
+fn import_raivo(arr: &[serde_json::Value]) -> Result<ImportOutcome, String> {
+    // Raivo writes numbers as JSON strings — accept both forms.
+    let num = |e: &serde_json::Value, k: &str, d: u64| -> u64 {
+        match e.get(k) {
+            Some(serde_json::Value::String(s)) => s.trim().parse().unwrap_or(d),
+            Some(serde_json::Value::Number(n)) => n.as_u64().unwrap_or(d),
+            _ => d,
+        }
+    };
+    let mut drafts = Vec::new();
+    let mut skipped = 0;
+    for e in arr {
+        let res: Result<Draft, String> = (|| {
+            let strf = |k: &str| e.get(k).and_then(|x| x.as_str()).map(|s| s.to_string());
+            let is_hotp = strf("kind").map(|t| t.eq_ignore_ascii_case("hotp")).unwrap_or(false);
+            let d = Draft {
+                issuer: strf("issuer").unwrap_or_default().trim().to_string(),
+                name: strf("account").unwrap_or_default().trim().to_string(),
+                secret: Zeroizing::new(b32_decode(&strf("secret").ok_or("missing secret")?)?),
+                algorithm: strf("algorithm").and_then(|a| Algorithm::parse(&a)).unwrap_or_default(),
+                digits: num(e, "digits", 6) as u32,
+                period: num(e, "timer", 30) as u32,
+                kind: if is_hotp { Kind::Hotp { counter: num(e, "counter", 0) } } else { Kind::Totp },
+                flavor: Flavor::Standard,
+                group: String::new(),
+            };
+            d.validate()?;
+            Ok(d)
+        })();
+        match res {
+            Ok(d) => drafts.push(d),
+            Err(_) => skipped += 1,
+        }
+    }
+    if drafts.is_empty() {
+        return Err("no valid accounts found in Raivo export".into());
+    }
+    Ok(ImportOutcome::ok("raivo", drafts, skipped))
+}
+
+// ---------------------------------------------------------------------------
+// Steam Desktop Authenticator maFile — single JSON object with a base64
+// "shared_secret" (raw 20-byte HMAC key, NOT base32) → Steam-flavored account.
+
+fn import_steam_mafile(v: &serde_json::Value) -> Result<ImportOutcome, String> {
+    let shared = v
+        .get("shared_secret")
+        .and_then(|s| s.as_str())
+        .ok_or("maFile has no shared_secret")?;
+    let raw = STANDARD.decode(shared.trim()).map_err(|_| "invalid shared_secret encoding".to_string())?;
+    if raw.len() < 10 {
+        return Err("maFile shared_secret is too short".into());
+    }
+    let name = v
+        .get("account_name")
+        .and_then(|s| s.as_str())
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or("Steam account")
+        .trim()
+        .to_string();
+    let d = Draft {
+        issuer: "Steam".into(),
+        name,
+        secret: Zeroizing::new(raw),
+        algorithm: Algorithm::SHA1,
+        digits: 5,
+        period: 30,
+        kind: Kind::Totp,
+        flavor: Flavor::Steam,
+        group: String::new(),
+    };
+    d.validate()?;
+    Ok(ImportOutcome::ok("steam-mafile", vec![d], 0))
+}
+
+// ---------------------------------------------------------------------------
+// Bitwarden CSV (Settings → Export vault, "File Format: .csv"): the
+// `login_totp` column carries either an otpauth:// URI or a raw Base32 seed.
+// Hand-rolled minimal CSV (quoted fields, "" escapes) to keep deps small.
+
+fn csv_fields(line: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut quoted = false;
+    let mut chars = line.chars().peekable();
+    while let Some(c) = chars.next() {
+        if quoted {
+            if c == '"' {
+                if chars.peek() == Some(&'"') {
+                    cur.push('"');
+                    chars.next();
+                } else {
+                    quoted = false;
+                }
+            } else {
+                cur.push(c);
+            }
+        } else if c == '"' {
+            quoted = true;
+        } else if c == ',' {
+            out.push(std::mem::take(&mut cur));
+        } else {
+            cur.push(c);
+        }
+    }
+    out.push(cur);
+    out
+}
+
+pub fn looks_like_bitwarden_csv(t: &str) -> bool {
+    let header = t.lines().find(|l| !l.trim().is_empty()).unwrap_or("").to_ascii_lowercase();
+    header.contains(',') && header.split(',').any(|c| c.trim() == "login_totp" || c.trim() == "totp")
+}
+
+fn import_bitwarden_csv(t: &str) -> Result<ImportOutcome, String> {
+    let mut lines = t.lines().filter(|l| !l.trim().is_empty()).peekable();
+    let header = lines.next().ok_or("empty file")?.to_ascii_lowercase();
+    let cols = csv_fields(&header);
+    let idx_of = |names: &[&str]| cols.iter().position(|c| names.contains(&c.trim()));
+    let totp_col = idx_of(&["login_totp", "totp"]).ok_or("CSV has no TOTP column")?;
+    let name_col = idx_of(&["name", "item_name"]);
+    let user_col = idx_of(&["login_username", "username"]);
+
+    let mut drafts = Vec::new();
+    let mut skipped = 0;
+    for line in lines {
+        let row = csv_fields(line.trim_end_matches('\r'));
+        let cell = |i: Option<usize>| i.and_then(|i| row.get(i).cloned()).unwrap_or_default().trim().to_string();
+        let totp = row.get(totp_col).map(|s| s.trim().to_string()).unwrap_or_default();
+        if totp.is_empty() {
+            continue; // vault rows without TOTP are not errors — just not ours
+        }
+        let res: Result<Draft, String> = if totp.starts_with("otpauth://") {
+            otpauth::parse_otpauth(&totp)
+        } else {
+            (|| {
+                let d = Draft {
+                    issuer: cell(name_col),
+                    name: cell(user_col),
+                    secret: Zeroizing::new(b32_decode(&totp)?),
+                    algorithm: Algorithm::SHA1,
+                    digits: 6,
+                    period: 30,
+                    kind: Kind::Totp,
+                    flavor: Flavor::Standard,
+                    group: String::new(),
+                };
+                d.validate()?;
+                Ok(d)
+            })()
+        };
+        match res {
+            Ok(d) => drafts.push(d),
+            Err(_) => skipped += 1,
+        }
+    }
+    if drafts.is_empty() && skipped == 0 {
+        return Err("CSV contains no TOTP entries".into());
+    }
+    if drafts.is_empty() {
+        return Err("CSV contains TOTP entries but none were parseable".into());
+    }
+    Ok(ImportOutcome::ok("bitwarden-csv", drafts, skipped))
+}
+
+// ---------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::crypto::rand_bytes;
+
+    #[test]
+    fn imports_2fas_plain_backup() {
+        let json = r#"{"services":[
+            {"name":"GitLab","secret":"JBSWY3DPEHPK3PXP","updatedAt":1715002704262,
+             "otp":{"label":"","account":"alice@x.com","digits":6,"period":30,"algorithm":"SHA1","tokenType":"TOTP","source":"Manual"}},
+            {"name":"Router","secret":"JBSWY3DPEHPK3PXP",
+             "otp":{"account":"admin","digits":8,"period":60,"algorithm":"SHA256","tokenType":"HOTP","counter":7}},
+            {"secret":"too-short"}
+        ]}"#;
+        let out = parse_text(json, None).unwrap();
+        assert_eq!(out.format, "2fas");
+        assert_eq!(out.drafts.len(), 2);
+        assert_eq!(out.skipped, 1);
+        assert_eq!(out.drafts[0].issuer, "GitLab");
+        assert_eq!(out.drafts[0].name, "alice@x.com");
+        assert_eq!(out.drafts[1].digits, 8);
+        assert!(matches!(out.drafts[1].kind, Kind::Hotp { counter: 7 }));
+    }
+
+    #[test]
+    fn rejects_encrypted_2fas_with_clear_error() {
+        let json = r#"{"servicesEncrypted":"longopaqueblob","appVersionCode":100}"#;
+        let err = match parse_text(json, None) {
+            Ok(_) => panic!("encrypted 2FAS must be rejected"),
+            Err(e) => e,
+        };
+        assert!(err.contains("2FAS"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn imports_andotp_backup() {
+        let json = r#"[
+            {"secret":"JBSWY3DPEHPK3PXP","issuer":"GitHub","label":"alice@x.com","type":"TOTP","algorithm":"SHA256","digits":6,"period":30,"counter":0},
+            {"secret":"JBSWY3DPEHPK3PXP","issuer":"Bank","label":"login","type":"HOTP","algorithm":"SHA1","digits":6,"period":30,"counter":3},
+            {"type":"TOTP"}
+        ]"#;
+        let out = parse_text(json, None).unwrap();
+        assert_eq!(out.format, "andotp");
+        assert_eq!(out.drafts.len(), 2);
+        assert_eq!(out.skipped, 1);
+        assert_eq!(out.drafts[0].issuer, "GitHub");
+        assert_eq!(out.drafts[0].name, "alice@x.com");
+        assert!(matches!(out.drafts[1].kind, Kind::Hotp { counter: 3 }));
+    }
+
+    #[test]
+    fn imports_raivo_export_with_string_numbers() {
+        let json = r#"[
+            {"kind":"TOTP","account":"me@example.com","secret":"JBSWY3DPEHPK3PXP","iconType":"raivo_repository","issuer":"Google","timer":"30","digits":"6","counter":"0","algorithm":"SHA1","iconValue":"google.png"},
+            {"kind":"HOTP","account":"root","secret":"JBSWY3DPEHPK3PXP","issuer":"NAS","timer":"30","digits":"8","counter":"12","algorithm":"SHA512"}
+        ]"#;
+        let out = parse_text(json, None).unwrap();
+        assert_eq!(out.format, "raivo");
+        assert_eq!(out.drafts.len(), 2);
+        assert_eq!(out.drafts[0].issuer, "Google");
+        assert_eq!(out.drafts[0].period, 30);
+        assert!(matches!(out.drafts[1].kind, Kind::Hotp { counter: 12 }));
+        assert_eq!(out.drafts[1].digits, 8);
+    }
+
+    #[test]
+    fn imports_steam_mafile_as_steam_flavor() {
+        // base64 of 20 bytes — the shape of a real maFile shared_secret.
+        let json = format!(
+            r#"{{"shared_secret":"{}","account_name":"gaben_w","serial_number":"112233"}}"#,
+            STANDARD.encode([9u8; 20])
+        );
+        let out = parse_text(&json, None).unwrap();
+        assert_eq!(out.format, "steam-mafile");
+        assert_eq!(out.drafts.len(), 1);
+        let d = &out.drafts[0];
+        assert_eq!(d.issuer, "Steam");
+        assert_eq!(d.name, "gaben_w");
+        assert_eq!(d.flavor, Flavor::Steam);
+        assert_eq!(d.digits, 5);
+        assert_eq!(d.secret.as_slice(), &[9u8; 20]);
+    }
+
+    #[test]
+    fn imports_bitwarden_csv_totp_column() {
+        let csv = "folder,favorite,type,name,notes,fields,reprompt,login_uri,login_username,login_password,login_totp\n\
+                   ,,login,Amazon,,,0,,\"alice@bitwarden.com\",,otpauth://totp/Amazon:alice@bitwarden.com?secret=JBSWY3DPEHPK3PXP&issuer=Amazon&algorithm=SHA1&digits=6&period=30\n\
+                   ,,login,\"Quoted, Name\",,,0,,bob,,JBSWY3DPEHPK3PXP\n\
+                   ,,login,NoTotp,,,0,,carol,,\n\
+                   ,,login,BrokenSeed,,,0,,dave,,NOT!BASE32\n";
+        assert!(looks_like_bitwarden_csv(csv));
+        let out = parse_text(csv, None).unwrap();
+        assert_eq!(out.format, "bitwarden-csv");
+        assert_eq!(out.drafts.len(), 2);
+        assert_eq!(out.skipped, 1);
+        assert_eq!(out.drafts[0].issuer, "Amazon");
+        assert_eq!(out.drafts[0].name, "alice@bitwarden.com");
+        assert_eq!(out.drafts[1].issuer, "Quoted, Name");
+        assert_eq!(out.drafts[1].name, "bob");
+    }
+
+    #[test]
+    fn otpauth_uri_with_steam_issuer_becomes_steam_flavor() {
+        let d = otpauth::parse_otpauth("otpauth://totp/Steam:gaben_w?secret=JBSWY3DPEHPK3PXP&issuer=Steam").unwrap();
+        assert_eq!(d.flavor, Flavor::Steam);
+        assert_eq!(d.digits, 5);
+        assert!(matches!(d.algorithm, Algorithm::SHA1));
+    }
 
     #[test]
     fn imports_otpauth_lines_and_skips_bad_ones() {

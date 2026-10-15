@@ -64,6 +64,7 @@ export interface Settings {
   view_mode: "rows" | "tiles" | string;
   show_timer_number: boolean;
   grouped_view: boolean;
+  tray: boolean;
   window?: { x: number; y: number; w: number; h: number } | null;
 }
 
