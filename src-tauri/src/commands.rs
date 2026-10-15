@@ -103,7 +103,6 @@ fn account_dto(a: &Account) -> AccountDto {
             _ => 0,
         },
         flavor: a.flavor.as_str().into(),
-        },
     }
 }
 
@@ -319,7 +318,8 @@ pub fn change_unlock_mode(
         }
     }
 
-    let session_key = with_session(&state, |s| Ok(s.key.clone()))?;
+    // [u8; 32] is Copy — take an owned key material snapshot for the switch.
+    let session_key: Zeroizing<[u8; 32]> = with_session(&state, |s| Ok(Zeroizing::new(*s.key)))?;
     let (new_kdf, new_key) = match mode.as_str() {
         "password" => {
             let pw = new_password

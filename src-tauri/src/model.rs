@@ -188,6 +188,7 @@ pub struct DraftIn {
     pub name: String,
     pub secret: String,
     pub group: Option<String>,
+    pub flavor: Option<String>, // "standard" (default) | "steam"
     pub algorithm: Option<String>,
     pub digits: Option<u32>,
     pub period: Option<u32>,

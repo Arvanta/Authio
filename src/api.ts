@@ -73,6 +73,7 @@ export interface DraftIn {
   name: string;
   secret: string;
   group?: string;
+  flavor?: "standard" | "steam" | string;
   algorithm?: string;
   digits?: number;
   period?: number;
