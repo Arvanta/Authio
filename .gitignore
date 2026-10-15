@@ -1,0 +1,17 @@
+
+# Dependencies / builds
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+
+# Logs & OS noise
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local config / secrets — never commit
+.env
+*.pem
+*.key

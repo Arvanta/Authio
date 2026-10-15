@@ -1,0 +1,163 @@
+{
+  "app": {
+    "name": "Authio",
+    "tagline": "Your keys, your device. Offline. Encrypted. Open source."
+  },
+  "setup": {
+    "title": "Set up your vault",
+    "intro": "All your secrets are encrypted with AES-256-GCM and never leave this device. Choose how the encryption key is protected:",
+    "mode.password": "Master password",
+    "mode.password.desc": "Strongest protection. The key is derived with Argon2id — without the password, nothing can be decrypted.",
+    "mode.keychain": "Windows sign-in (OS keychain)",
+    "mode.keychain.desc": "Most convenient. A random key is stored in the Windows Credential Manager and unlocked with your Windows session.",
+    "password": "Master password (min. 8 characters)",
+    "confirm": "Confirm master password",
+    "mismatch": "Passwords do not match",
+    "create": "Create vault",
+    "creating": "Deriving key…"
+  },
+  "lock": {
+    "title": "Welcome back",
+    "subtitle.password": "Enter your master password to unlock your codes.",
+    "subtitle.keychain": "Your vault unlocks with your Windows session.",
+    "password": "Master password",
+    "unlock": "Unlock",
+    "auto": "Locked automatically for your safety."
+  },
+  "main": {
+    "search": "Search accounts…",
+    "add": "Add account",
+    "import": "Import",
+    "export": "Export",
+    "settings": "Settings",
+    "lock": "Lock now",
+    "showall": "Show all codes",
+    "hideall": "Hide all codes",
+    "pinned": "Pinned",
+    "accounts": "Accounts",
+    "empty.title": "No accounts yet",
+    "empty.hint": "Add one manually, scan a QR image, or import from Google Authenticator, Aegis or Authme.",
+    "none": "No accounts match your search."
+  },
+  "code": {
+    "reveal": "Reveal code",
+    "hide": "Hide code",
+    "copy": "Copy code",
+    "copied": "Copied!",
+    "next": "Next code",
+    "hotp_hint": "Counter-based — tap for next code"
+  },
+  "card": {
+    "edit": "Edit",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "delete": "Delete",
+    "secret": "Reveal secret"
+  },
+  "delete": {
+    "title": "Delete account?",
+    "msg": "This permanently removes “{issuer} / {name}”. Make sure you have another way to sign in.",
+    "confirm": "Delete"
+  },
+  "add": {
+    "title": "Add account",
+    "tab.qr": "QR image",
+    "tab.uri": "otpauth:// link",
+    "tab.manual": "Manual entry",
+    "qr.choose": "Choose an image…",
+    "qr.hint": "Select a screenshot or photo of a QR code (PNG or JPEG). Google Authenticator export QRs are supported.",
+    "uri.label": "Paste an otpauth:// URI",
+    "uri.hint": "Usually starts with otpauth://totp/…",
+    "uri.submit": "Add from link",
+    "manual.issuer": "Service (issuer)",
+    "manual.issuer.ph": "e.g. GitHub",
+    "manual.name": "Account name",
+    "manual.name.ph": "e.g. alice@example.com",
+    "manual.secret": "Secret key (Base32)",
+    "manual.secret.ph": "JBSW Y3DP EHPK 3PXP…",
+    "manual.type": "Type",
+    "manual.counter": "Initial counter",
+    "manual.algorithm": "Algorithm",
+    "manual.digits": "Digits",
+    "manual.period": "Period (seconds)",
+    "manual.submit": "Add account",
+    "manual.hint": "The secret is the Base32 string shown next to the QR code when enabling 2FA."
+  },
+  "import": {
+    "title": "Import accounts",
+    "tab.file": "From file",
+    "tab.text": "Paste text",
+    "file.choose": "Choose backup file…",
+    "file.hint": "Authio backups, Aegis vaults (auth files), Authme exports and otpauth text lists are supported.",
+    "text.label": "Paste backup contents or otpauth:// URIs",
+    "text.submit": "Continue",
+    "password.title": "This backup is encrypted",
+    "password.hint": "Enter the password protecting this backup file.",
+    "password.submit": "Decrypt",
+    "preview.title": "Review import",
+    "preview.format": "Detected format",
+    "preview.skipped": "{n} malformed entr(ies) skipped",
+    "preview.dupe": "duplicate",
+    "preview.none": "No accounts found.",
+    "preview.submit": "Import selected ({n})",
+    "preview.selectall": "Select all"
+  },
+  "export": {
+    "title": "Export backup",
+    "mode": "Protection",
+    "encrypted": "Encrypted (recommended)",
+    "encrypted.desc": "Protected with its own passphrase (Argon2id + AES-256-GCM).",
+    "plain": "Unencrypted JSON",
+    "plain.desc": "Readable by anyone. Use only for migration into another trusted app.",
+    "plain.warn": "This file will contain ALL your secrets in plain text.",
+    "plain.ack": "I understand the risk",
+    "password": "Backup passphrase (min. 8)",
+    "password2": "Repeat passphrase",
+    "mismatch": "Passphrases do not match",
+    "master": "Master password (re-authentication)",
+    "submit": "Choose location & export",
+    "empty": "No accounts to export yet."
+  },
+  "settings": {
+    "title": "Settings",
+    "theme": "Theme",
+    "theme.system": "System",
+    "theme.light": "Light",
+    "theme.dark": "Dark",
+    "density": "Density",
+    "density.compact": "Compact",
+    "density.comfortable": "Comfortable",
+    "font": "Code size",
+    "sort_alpha": "Sort alphabetically (disables drag & drop)",
+    "hide_codes": "Hide codes until revealed",
+    "autolock": "Auto-lock after inactivity",
+    "autolock.minutes": "minutes",
+    "autolock.off": "off",
+    "lock_minimize": "Lock when window is minimized",
+    "about": "Authio {v} — MIT licensed. No internet, no telemetry. Secrets never leave this device.",
+    "saved": "Settings saved"
+  },
+  "reveal": {
+    "title": "Reveal secret",
+    "master": "Master password (required to show secrets)",
+    "submit": "Reveal",
+    "secret": "Secret (Base32)",
+    "uri": "otpauth:// URI",
+    "hint": "Never share this with anyone."
+  },
+  "common": {
+    "cancel": "Cancel",
+    "close": "Close",
+    "back": "Back",
+    "ok": "OK",
+    "save": "Save",
+    "error": "Something went wrong"
+  },
+  "toast": {
+    "added": "Account added",
+    "imported": "{n} account(s) imported",
+    "deleted": "Account deleted",
+    "updated": "Account updated",
+    "wrongpassword": "Incorrect password"
+  }
+}

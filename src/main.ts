@@ -1,0 +1,1453 @@
+/**
+ * Authio UI — framework-free TypeScript.
+ * The UI only ever handles codes and metadata; raw secrets never cross IPC
+ * except inside the reveal-secret dialog (which re-authenticates) and exports.
+ */
+import { listen } from "@tauri-apps/api/event";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { AccountDto, CodeDto, PreviewDto, Settings, StatusDto, api } from "./api";
+import { t } from "./i18n";
+import "./styles.css";
+
+/* ------------------------------------------------------------------ icons */
+const ICONS = {
+  shield:
+    '<path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z"/><circle cx="12" cy="10.5" r="1.8"/><path d="M12 12.3v3.7"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  lock: '<rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+  gear:
+    '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/>',
+  upload: '<path d="M12 15V3m0 0L8 7m4-4 4 4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>',
+  download:
+    '<path d="M12 3v10m0 0L8 9m4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>',
+  eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+  eyeOff:
+    '<path d="M3 3l18 18"/><path d="M10.6 5.1A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-2.2 3.1M6.6 6.6A16.9 16.9 0 0 0 2 12s3.5 7 10 7a9.8 9.8 0 0 0 2.2-.3"/>',
+  copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
+  star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
+  pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  key: '<path d="M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 0-7.9 7.9 5.5 5.5 0 0 0 7.9-7.9Zm0 0L19 4m-4.5 1.5L17 8"/>',
+  trash:
+    '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>',
+  qr: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM21 14v3M14 21h3M18 18h3v3"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  mag: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  alert:
+    '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0ZM12 9v4m0 4h.01"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+} as const;
+type IconName = keyof typeof ICONS;
+
+/* --------------------------------------------------------------- dom infra */
+function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  cls?: string,
+  text?: string,
+): HTMLElementTagNameMap[K] {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+
+function icon(name: IconName, cls?: string): SVGSVGElement {
+  const w = document.createElement("div");
+  w.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
+  const s = w.firstElementChild as unknown as SVGSVGElement;
+  if (cls) s.setAttribute("class", cls);
+  return s;
+}
+
+function iconBtn(name: IconName, title: string, cls = ""): HTMLButtonElement {
+  const b = el("button", `iconbtn ${cls}`.trim());
+  b.title = title;
+  b.append(icon(name));
+  return b;
+}
+
+function toast(msg: string, isErr = false) {
+  let host = document.querySelector<HTMLElement>(".toasts");
+  if (!host) {
+    host = el("div", "toasts");
+    document.body.append(host);
+  }
+  const tEl = el("div", `toast${isErr ? " err" : ""}`, msg);
+  host.append(tEl);
+  setTimeout(() => tEl.remove(), 2600);
+}
+
+interface ModalHandle {
+  close(): void;
+  body: HTMLElement;
+  modal: HTMLElement;
+}
+
+function openModal(title: string, closable = true): ModalHandle {
+  const overlay = el("div", "overlay");
+  const modal = el("div", "modal");
+  const head = el("div", "mhead");
+  head.append(el("h2", "", title));
+  const body = el("div", "mbody");
+  modal.append(head, body);
+  overlay.append(modal);
+  const h: ModalHandle = { close: () => overlay.remove(), body, modal };
+  if (closable) {
+    const x = iconBtn("x", t("common.close"));
+    x.onclick = () => h.close();
+    head.append(x);
+  }
+  overlay.addEventListener("pointerdown", (e) => {
+    if (e.target === overlay && closable) h.close();
+  });
+  document.body.append(overlay);
+  return h;
+}
+
+function footer(...buttons: HTMLButtonElement[]): HTMLElement {
+  const f = el("div", "mfoot");
+  f.append(...buttons);
+  return f;
+}
+
+async function confirmBox(
+  title: string,
+  msg: string,
+  confirmText: string,
+  danger = false,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const h = openModal(title);
+    h.body.append(el("p", "hint", msg));
+    const no = el("button", "btn", t("common.cancel"));
+    const yes = el("button", `btn${danger ? " danger" : " primary"}`, confirmText);
+    no.onclick = () => {
+      h.close();
+      resolve(false);
+    };
+    yes.onclick = () => {
+      h.close();
+      resolve(true);
+    };
+    h.modal.append(footer(no, yes));
+    yes.focus();
+  });
+}
+
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const ta = el("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.append(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+function field(labelText: string, input: HTMLElement): HTMLElement {
+  const wrap = el("div");
+  wrap.append(el("label", "lbl", labelText), input);
+  return wrap;
+}
+
+function fmtError(e: unknown): string {
+  const s = typeof e === "string" ? e : e instanceof Error ? e.message : String(e);
+  return s.replace(/^error invoking .*?:/i, "").trim() || t("common.error");
+}
+
+/* --------------------------------------------------------------- app state */
+type Route = "setup" | "lock" | "main";
+let route: Route = "lock";
+let statusInfo: StatusDto | null = null;
+let settings: Settings = {
+  theme: "system",
+  density: "compact",
+  font_scale: 100,
+  sort_alpha: false,
+  hide_codes: true,
+  auto_lock_minutes: 5,
+  lock_on_minimize: true,
+};
+let accounts: AccountDto[] = [];
+let search = "";
+const hidden = new Set<string>();
+const lastHotp = new Map<string, { code: string; until: number }>();
+const tickRefs = new Map<
+  string,
+  { code: HTMLElement; remain: HTMLElement | null; fill: SVGCircleElement | null; dots: boolean }
+>();
+
+const app = document.getElementById("app")!;
+const mediaDark = matchMedia("(prefers-color-scheme: dark)");
+
+function applyVisualSettings() {
+  const sys = mediaDark.matches ? "dark" : "light";
+  document.documentElement.dataset.theme = settings.theme === "system" ? sys : settings.theme;
+  document.body.dataset.density = settings.density;
+  document.documentElement.style.setProperty("--font-scale", String(settings.font_scale / 100));
+}
+mediaDark.addEventListener("change", () => {
+  if (settings.theme === "system") applyVisualSettings();
+});
+
+// Keep the backend idle-timer in sync with real user activity (throttled).
+let lastPing = 0;
+for (const ev of ["pointerdown", "keydown"] as const) {
+  window.addEventListener(
+    ev,
+    () => {
+      const n = Date.now();
+      if (n - lastPing > 4000 && route === "main") {
+        lastPing = n;
+        api.userActivity().catch(() => undefined);
+      }
+    },
+    { passive: true },
+  );
+}
+
+/* ---------------------------------------------------------------- routing */
+function setRoute(r: Route) {
+  route = r;
+  app.innerHTML = "";
+}
+
+async function refreshStatus(): Promise<StatusDto> {
+  statusInfo = await api.status();
+  return statusInfo;
+}
+
+/* ------------------------------------------------------------------ setup */
+function renderSetup() {
+  setRoute("setup");
+  const screen = el("div", "center-screen");
+  const panel = el("div", "panel");
+
+  const brand = el("div", "brand");
+  const logo = el("div", "logo");
+  logo.append(icon("shield"));
+  brand.append(logo, el("h1", "", t("app.name")));
+  panel.append(brand, el("h2", "", ""), el("p", "sub", t("setup.intro")));
+
+  const h2 = panel.querySelector("h2")!;
+  h2.textContent = t("setup.title");
+  h2.style.cssText = "font-size:16px;margin-bottom:6px";
+
+  let mode: "password" | "keychain" = "password";
+  const cards = el("div", "mode-cards");
+  const mkCard = (m: typeof mode, title: string, desc: string, ic: IconName) => {
+    const c = el("button", "mode-card");
+    c.type = "button";
+    const tl = el("div", "t");
+    tl.append(icon(ic), document.createTextNode(title));
+    c.append(tl, el("div", "d", desc));
+    c.onclick = () => {
+      mode = m;
+      cards.querySelectorAll(".mode-card").forEach((n) => n.classList.toggle("sel", n === c));
+      pwWrap.style.display = m === "password" ? "" : "none";
+    };
+    return c;
+  };
+  const cPw = mkCard("password", t("setup.mode.password"), t("setup.mode.password.desc"), "key");
+  const cKc = mkCard("keychain", t("setup.mode.keychain"), t("setup.mode.keychain.desc"), "shield");
+  cards.append(cPw, cKc);
+  cPw.classList.add("sel");
+
+  const pw1 = el("input") as HTMLInputElement;
+  pw1.type = "password";
+  pw1.placeholder = t("setup.password");
+  const pw2 = el("input") as HTMLInputElement;
+  pw2.type = "password";
+  pw2.placeholder = t("setup.confirm");
+  const pwWrap = el("div");
+  pwWrap.append(field("", pw1), field("", pw2));
+  (pwWrap.querySelectorAll("label") as NodeListOf<HTMLElement>).forEach((l) => l.remove());
+
+  const err = el("div", "errline");
+  const go = el("button", "btn primary block", t("setup.create"));
+  go.onclick = async () => {
+    err.textContent = "";
+    if (mode === "password") {
+      if (pw1.value.length < 8) {
+        err.textContent = t("setup.password");
+        return;
+      }
+      if (pw1.value !== pw2.value) {
+        err.textContent = t("setup.mismatch");
+        return;
+      }
+    }
+    go.disabled = true;
+    go.textContent = t("setup.creating");
+    try {
+      await api.setupVault(mode, mode === "password" ? pw1.value : undefined);
+      pw1.value = pw2.value = "";
+      await enterMain();
+    } catch (e) {
+      err.textContent = fmtError(e);
+      go.disabled = false;
+      go.textContent = t("setup.create");
+    }
+  };
+
+  panel.append(cards, pwWrap, err, go);
+  screen.append(panel);
+  app.append(screen);
+}
+
+/* ------------------------------------------------------------------- lock */
+function renderLock(auto = false) {
+  setRoute("lock");
+  tickRefs.clear();
+  const screen = el("div", "center-screen");
+  const panel = el("div", "panel slim");
+
+  const brand = el("div", "brand");
+  const logo = el("div", "logo");
+  logo.append(icon("shield"));
+  brand.append(logo, el("h1", "", t("app.name")));
+  panel.append(brand);
+  const h2 = el("h2", "", t("lock.title"));
+  h2.style.cssText = "font-size:16px;margin-bottom:4px";
+  panel.append(h2);
+
+  const mode = statusInfo?.mode ?? "password";
+  panel.append(
+    el("p", "sub", mode === "password" ? t("lock.subtitle.password") : t("lock.subtitle.keychain")),
+  );
+  if (auto) {
+    const b = el("div", "banner");
+    b.append(icon("lock"), document.createTextNode(t("lock.auto")));
+    panel.append(b);
+  }
+
+  const err = el("div", "errline");
+  const form = el("form");
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    err.textContent = "";
+    const pw = input.value;
+    try {
+      await api.unlock(mode === "password" ? pw : undefined);
+      input.value = "";
+      await enterMain();
+    } catch (ex) {
+      err.textContent = fmtError(ex);
+    }
+  };
+
+  const input = el("input") as HTMLInputElement;
+  input.type = "password";
+  input.placeholder = t("lock.password");
+  input.autocomplete = "current-password";
+
+  const go = el("button", "btn primary block", t("lock.unlock"));
+  go.type = "submit";
+
+  if (mode === "password") form.append(input, go);
+  else form.append(go);
+  panel.append(form, err);
+  screen.append(panel);
+  app.append(screen);
+  if (mode === "password") input.focus();
+}
+
+/* ------------------------------------------------------------------- main */
+async function enterMain() {
+  accounts = await api.listAccounts();
+  hidden.clear();
+  if (settings.hide_codes) for (const a of accounts) hidden.add(a.id);
+  lastHotp.clear();
+  renderMain();
+  void pollCodes();
+}
+
+function sortedFiltered(): { pinned: AccountDto[]; rest: AccountDto[] } {
+  const q = search.trim().toLowerCase();
+  let list = accounts;
+  if (q) list = list.filter((a) => `${a.issuer} ${a.name}`.toLowerCase().includes(q));
+  const cmp = settings.sort_alpha
+    ? (x: AccountDto, y: AccountDto) =>
+        (x.issuer || x.name).localeCompare(y.issuer || y.name) || x.name.localeCompare(y.name)
+    : (x: AccountDto, y: AccountDto) => x.sort - y.sort;
+  const pinned = list.filter((a) => a.pinned).sort(cmp);
+  const rest = list.filter((a) => !a.pinned).sort(cmp);
+  return { pinned, rest };
+}
+
+function avatarColor(key: string): string {
+  let h = 0;
+  for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const hue = h % 360;
+  return `hsl(${hue} 55% 46%)`;
+}
+
+function grouped(code: string): string {
+  return code.replace(/(\d{3})(?=\d)/g, "$1 ");
+}
+
+function accountCard(a: AccountDto): HTMLElement {
+  const card = el("div", "card");
+  card.dataset.id = a.id;
+
+  const avatar = el("div", "avatar", (a.issuer || a.name || "?").charAt(0).toUpperCase());
+  avatar.style.background = avatarColor(a.issuer + "/" + a.name);
+
+  const meta = el("div", "meta");
+  meta.append(el("div", "issuer", a.issuer || a.name), el("div", "name", a.issuer ? a.name : ""));
+
+  const isHotp = a.kind === "hotp";
+  const code = el("span", isHotp ? "code" : "code hidden-code", isHotp ? "•••" : "••• •••");
+  code.title = isHotp ? t("code.next") : t("code.reveal");
+
+  const codecol = el("div", "codecol");
+
+  let remain: HTMLElement | null = null;
+  let fill: SVGCircleElement | null = null;
+  if (!isHotp) {
+    const timercol = el("div", "timercol");
+    const svgNS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("class", "ring");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    const mk = (cls: string) => {
+      const c = document.createElementNS(svgNS, "circle");
+      c.setAttribute("class", cls);
+      c.setAttribute("cx", "12");
+      c.setAttribute("cy", "12");
+      c.setAttribute("r", "9");
+      c.setAttribute("fill", "none");
+      c.setAttribute("stroke-width", cls === "fill" ? "3" : "2.5");
+      return c;
+    };
+    const track = mk("track");
+    const f = mk("fill") as SVGCircleElement;
+    f.setAttribute("stroke-dasharray", "56.55");
+    f.setAttribute("stroke-dashoffset", "0");
+    svg.append(track, f);
+    fill = f;
+    remain = el("div", "remain", a.period + "s");
+    timercol.append(svg, remain);
+    codecol.append(code, timercol);
+  } else {
+    codecol.append(code);
+  }
+
+  tickRefs.set(a.id, { code, remain, fill, dots: true });
+
+  const actions = el("div", "actions");
+  const copyB = iconBtn("copy", t("code.copy"));
+  copyB.onclick = async () => {
+    const cur = tickRefs.get(a.id);
+    const dto = await latestCode(a);
+    const value = isHotp ? lastHotp.get(a.id)?.code : dto?.code ?? undefined;
+    if (!value) {
+      if (isHotp) await doHotp(a);
+      else hidden.delete(a.id);
+      void pollCodes();
+      return;
+    }
+    const ok = await copyText(value);
+    if (ok) {
+      copyB.innerHTML = "";
+      copyB.append(icon("check"));
+      setTimeout(() => {
+        copyB.innerHTML = "";
+        copyB.append(icon("copy"));
+      }, 1100);
+      if (cur) cur.code.classList.add("copied");
+      setTimeout(() => cur?.code.classList.remove("copied"), 700);
+    }
+  };
+
+  code.onclick = async () => {
+    if (isHotp) {
+      await doHotp(a);
+      return;
+    }
+    if (hidden.has(a.id)) {
+      hidden.delete(a.id);
+    } else {
+      const dto = await latestCode(a);
+      if (dto?.code) await copyText(dto.code);
+    }
+    void pollCodes();
+  };
+
+  const pinB = iconBtn("star", a.pinned ? t("card.unpin") : t("card.pin"));
+  if (a.pinned) pinB.classList.add("on");
+  pinB.onclick = async () => {
+    await api.setPinned(a.id, !a.pinned);
+    await refresh();
+  };
+
+  const editB = iconBtn("pencil", t("card.edit"), "ghost");
+  editB.onclick = () => openEditModal(a);
+  const secretB = iconBtn("key", t("card.secret"), "ghost");
+  secretB.onclick = () => openRevealModal(a);
+  const delB = iconBtn("trash", t("card.delete"), "ghost");
+  delB.onclick = async () => {
+    const ok = await confirmBox(
+      t("delete.title"),
+      t("delete.msg", { issuer: a.issuer || "—", name: a.name }),
+      t("delete.confirm"),
+      true,
+    );
+    if (ok) {
+      try {
+        await api.deleteAccount(a.id);
+        hidden.delete(a.id);
+        toast(t("toast.deleted"));
+        await refresh();
+      } catch (e) {
+        toast(fmtError(e), true);
+      }
+    }
+  };
+
+  actions.append(copyB, pinB, editB, secretB, delB);
+
+  // Drag & drop manual reorder (disabled while filtering or alpha-sorting).
+  const dnd = !settings.sort_alpha && !search;
+  card.draggable = dnd;
+  if (dnd) {
+    card.addEventListener("dragstart", (e) => {
+      card.classList.add("dragging");
+      e.dataTransfer?.setData("text/plain", a.id);
+      e.dataTransfer?.setDragImage(card, 20, 20);
+    });
+    card.addEventListener("dragend", () => card.classList.remove("dragging"));
+    card.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      card.classList.add("dragover");
+    });
+    card.addEventListener("dragleave", () => card.classList.remove("dragover"));
+    card.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      card.classList.remove("dragover");
+      const draggedId = e.dataTransfer?.getData("text/plain");
+      if (!draggedId || draggedId === a.id) return;
+      // Rebuild the full ordered id list: remove the dragged id, then re-insert
+      // it right before the id it was dropped on.
+      const all = accounts.slice().sort((x, y) => x.sort - y.sort).map((x) => x.id);
+      const without = all.filter((id) => id !== draggedId);
+      const idx = without.indexOf(a.id);
+      if (idx === -1) return;
+      without.splice(idx, 0, draggedId);
+      try {
+        await api.reorder(without);
+        await refresh();
+      } catch (err) {
+        toast(fmtError(err), true);
+      }
+    });
+  }
+
+  card.append(avatar, meta, codecol, actions);
+  return card;
+}
+
+async function doHotp(a: AccountDto) {
+  try {
+    const dto = await api.hotpNext(a.id);
+    if (dto.code) lastHotp.set(a.id, { code: dto.code, until: Date.now() + 30000 });
+    void pollCodes();
+  } catch (e) {
+    toast(fmtError(e), true);
+  }
+}
+
+const codeCache = new Map<string, CodeDto>();
+
+async function latestCode(a: AccountDto): Promise<CodeDto | undefined> {
+  return codeCache.get(a.id);
+}
+
+function applyCodes(codes: CodeDto[]) {
+  codeCache.clear();
+  for (const dto of codes) codeCache.set(dto.id, dto);
+  for (const dto of codes) {
+    const ref = tickRefs.get(dto.id);
+    const acc = accounts.find((x) => x.id === dto.id);
+    if (!ref || !acc) continue;
+    if (acc.kind === "hotp") {
+      const hp = lastHotp.get(dto.id);
+      if (hp && hp.until > Date.now()) {
+        ref.code.textContent = grouped(hp.code);
+        ref.code.classList.remove("hidden-code");
+      } else {
+        ref.code.textContent = "•••";
+        ref.code.title = t("code.next");
+        ref.code.classList.add("hidden-code");
+      }
+      continue;
+    }
+    if (!dto.code) continue;
+    if (hidden.has(dto.id)) {
+      ref.code.textContent = "•".repeat(acc.digits).replace(/(.{3})(?=.)/g, "$1 ");
+      ref.code.classList.add("hidden-code");
+      ref.code.title = t("code.reveal");
+    } else {
+      ref.code.textContent = grouped(dto.code);
+      ref.code.classList.remove("hidden-code");
+      ref.code.title = t("code.copy");
+    }
+    if (ref.fill) {
+      ref.fill.style.strokeDashoffset = String(56.55 * (1 - dto.progress));
+      ref.fill.style.stroke = dto.remaining <= 5 ? "var(--danger)" : "";
+    }
+    if (ref.remain) ref.remain.textContent = `${dto.remaining}s`;
+  }
+}
+
+async function pollCodes() {
+  if (route !== "main") return;
+  try {
+    applyCodes(await api.getCodes());
+  } catch (e) {
+    if (fmtError(e).includes("locked")) {
+      await refreshStatus();
+      renderLock(true);
+    }
+  }
+}
+
+async function refresh() {
+  accounts = await api.listAccounts();
+  renderList();
+  void pollCodes();
+}
+
+let listHost: HTMLElement;
+
+function renderList() {
+  tickRefs.clear();
+  listHost.innerHTML = "";
+  if (accounts.length === 0) {
+    const empty = el("div", "empty");
+    const big = el("div", "big");
+    big.append(icon("shield"));
+    empty.append(big, el("h3", "", t("main.empty.title")), el("p", "", t("main.empty.hint")));
+    listHost.append(empty);
+    return;
+  }
+  const { pinned, rest } = sortedFiltered();
+  const q = search.trim();
+  if (pinned.length === 0 && rest.length === 0 && q) {
+    const empty = el("div", "empty");
+    empty.append(el("p", "", t("main.none")));
+    listHost.append(empty);
+    return;
+  }
+  if (pinned.length) {
+    listHost.append(el("div", "section-label", t("main.pinned")));
+    pinned.forEach((a) => listHost.append(accountCard(a)));
+    if (rest.length) listHost.append(el("div", "section-label", t("main.accounts")));
+  }
+  rest.forEach((a) => listHost.append(accountCard(a)));
+}
+
+function renderMain() {
+  setRoute("main");
+
+  // --- top bar
+  const top = el("div", "topbar");
+  const brand = el("div", "brand");
+  const logo = el("div", "logo");
+  logo.append(icon("shield"));
+  brand.append(logo, el("h1", "", t("app.name")));
+
+  const eyeAll = iconBtn(settings.hide_codes ? "eyeOff" : "eye", t("main.showall"));
+  eyeAll.onclick = () => {
+    if (settings.hide_codes) {
+      settings.hide_codes = false;
+      hidden.clear();
+      eyeAll.title = t("main.hideall");
+    } else {
+      settings.hide_codes = true;
+      accounts.forEach((a) => hidden.add(a.id));
+      eyeAll.title = t("main.showall");
+    }
+    eyeAll.innerHTML = "";
+    eyeAll.append(icon(settings.hide_codes ? "eyeOff" : "eye"));
+    void api.setSettings(settings).catch(() => undefined);
+    renderList();
+    void pollCodes();
+  };
+
+  const addB = iconBtn("plus", t("main.add"));
+  addB.style.color = "var(--accent)";
+  addB.onclick = () => openAddModal();
+
+  const importB = iconBtn("download", t("main.import"));
+  importB.onclick = () => openImportModal();
+
+  const exportB = iconBtn("upload", t("main.export"));
+  exportB.onclick = () => openExportModal();
+
+  const gearB = iconBtn("gear", t("main.settings"));
+  gearB.onclick = () => openSettingsModal();
+
+  const lockB = iconBtn("lock", t("main.lock"));
+  lockB.onclick = async () => {
+    await api.lock().catch(() => undefined);
+    await refreshStatus();
+    renderLock();
+  };
+
+  top.append(brand, el("div", "spacer"), eyeAll, addB, importB, exportB, gearB, lockB);
+
+  // --- search
+  const srow = el("div", "searchrow");
+  const sinput = el("input") as HTMLInputElement;
+  sinput.type = "search";
+  sinput.placeholder = t("main.search");
+  sinput.value = search;
+  sinput.oninput = () => {
+    search = sinput.value;
+    renderList();
+    void pollCodes();
+  };
+  const mag = icon("mag", "mag");
+  srow.append(sinput, mag);
+
+  listHost = el("div", "list");
+  app.append(top, srow, listHost);
+  renderList();
+}
+
+/* --------------------------------------------------------------- add modal */
+function openAddModal() {
+  const h = openModal(t("add.title"));
+  const tabs = el("div", "tabs");
+  const content = el("div");
+  h.body.append(tabs, content);
+
+  type TabId = "qr" | "uri" | "manual";
+  const mkTabBtn = (id: TabId, label: string) => {
+    const b = el("button", "tab", label);
+    b.type = "button";
+    b.onclick = () => {
+      tabs.querySelectorAll(".tab").forEach((n) => n.classList.toggle("sel", n === b));
+      show(id);
+    };
+    return b;
+  };
+  const bQr = mkTabBtn("qr", t("add.tab.qr"));
+  const bUri = mkTabBtn("uri", t("add.tab.uri"));
+  const bManual = mkTabBtn("manual", t("add.tab.manual"));
+  tabs.append(bQr, bUri, bManual);
+  bQr.classList.add("sel");
+
+  const clearFoot = () => h.modal.querySelector(".mfoot")?.remove();
+
+  function show(id: TabId) {
+    content.innerHTML = "";
+    clearFoot();
+    if (id === "qr") {
+      content.append(el("p", "hint", t("add.qr.hint")));
+      const pick = el("button", "btn primary block", t("add.qr.choose"));
+      pick.prepend(icon("qr"));
+      pick.onclick = async () => {
+        const path = await open({
+          multiple: false,
+          filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg"] }],
+        });
+        if (!path || typeof path !== "string") return;
+        try {
+          const preview = await api.importQr(path);
+          h.close();
+          openImportPreview(preview);
+        } catch (e) {
+          toast(fmtError(e), true);
+        }
+      };
+      content.append(pick);
+    } else if (id === "uri") {
+      const ta = el("textarea");
+      ta.placeholder = "otpauth://totp/Issuer:account?secret=…";
+      const err = el("div", "errline");
+      const go = el("button", "btn primary", t("add.uri.submit"));
+      go.onclick = async () => {
+        err.textContent = "";
+        const uri = ta.value.trim();
+        if (!uri) return;
+        go.disabled = true;
+        try {
+          await api.addFromUri(uri);
+          toast(t("toast.added"));
+          h.close();
+          await refresh();
+        } catch (e) {
+          err.textContent = fmtError(e);
+          go.disabled = false;
+        }
+      };
+      content.append(field(t("add.uri.label"), ta), el("p", "hint", t("add.uri.hint")), err);
+      const cancel = el("button", "btn", t("common.cancel"));
+      cancel.onclick = () => h.close();
+      h.modal.append(footer(cancel, go));
+    } else {
+      manualForm(content, h);
+    }
+  }
+
+  function manualForm(host: HTMLElement, handle: ModalHandle) {
+    const issuer = el("input") as HTMLInputElement;
+    issuer.placeholder = t("add.manual.issuer.ph");
+    const name = el("input") as HTMLInputElement;
+    name.placeholder = t("add.manual.name.ph");
+    const secret = el("input") as HTMLInputElement;
+    secret.placeholder = t("add.manual.secret.ph");
+    secret.style.fontFamily = "var(--mono)";
+    const kind = el("select") as HTMLSelectElement;
+    kind.append(new Option("TOTP (time-based)", "totp"), new Option("HOTP (counter-based)", "hotp"));
+    const algo = el("select") as HTMLSelectElement;
+    algo.append(new Option("SHA-1", "SHA1"), new Option("SHA-256", "SHA256"), new Option("SHA-512", "SHA512"));
+    const digits = el("select") as HTMLSelectElement;
+    digits.append(new Option("6", "6"), new Option("8", "8"));
+    const period = el("input") as HTMLInputElement;
+    period.type = "number";
+    period.min = "5";
+    period.max = "300";
+    period.value = "30";
+    const counter = el("input") as HTMLInputElement;
+    counter.type = "number";
+    counter.min = "0";
+    counter.value = "0";
+
+    const fKind = field(t("manual.type"), kind);
+    const fPeriod = field(t("add.manual.period"), period);
+    const fCounter = field(t("add.manual.counter"), counter);
+    const rowKind = el("div", "row2");
+    rowKind.append(fKind, field(t("add.manual.algorithm"), algo));
+    const rowNums = el("div", "row2");
+    rowNums.append(fPeriod, fCounter);
+    fCounter.style.display = "none";
+    kind.onchange = () => {
+      const hotp = kind.value === "hotp";
+      fCounter.style.display = hotp ? "" : "none";
+      fPeriod.style.display = hotp ? "none" : "";
+    };
+
+    const err = el("div", "errline");
+    const go = el("button", "btn primary", t("add.manual.submit"));
+    go.onclick = async () => {
+      err.textContent = "";
+      go.disabled = true;
+      try {
+        await api.addAccount({
+          issuer: issuer.value,
+          name: name.value,
+          secret: secret.value,
+          algorithm: algo.value,
+          digits: Number(digits.value),
+          period: Number(period.value || 30),
+          kind: kind.value === "hotp" ? "hotp" : "totp",
+          counter: Number(counter.value || 0),
+        });
+        toast(t("toast.added"));
+        handle.close();
+        await refresh();
+      } catch (e) {
+        err.textContent = fmtError(e);
+        go.disabled = false;
+      }
+    };
+    host.append(
+      field(t("add.manual.issuer"), issuer),
+      field(t("add.manual.name"), name),
+      field(t("add.manual.secret"), secret),
+      rowKind,
+      rowNums,
+      field(t("add.manual.digits"), digits),
+      el("p", "hint", t("add.manual.hint")),
+      err,
+    );
+    const cancel = el("button", "btn", t("common.cancel"));
+    cancel.onclick = () => handle.close();
+    handle.modal.append(footer(cancel, go));
+  }
+
+  show("qr");
+}
+
+/* ------------------------------------------------------------ import flow */
+function openImportModal() {
+  const h = openModal(t("import.title"));
+  const tabs = el("div", "tabs");
+  const content = el("div");
+  h.body.append(tabs, content);
+  const clearFoot = () => h.modal.querySelector(".mfoot")?.remove();
+
+  type TabId = "file" | "text";
+  const mkTabBtn = (id: TabId, label: string) => {
+    const b = el("button", "tab", label);
+    b.type = "button";
+    b.onclick = () => {
+      tabs.querySelectorAll(".tab").forEach((n) => n.classList.toggle("sel", n === b));
+      show(id);
+    };
+    return b;
+  };
+  const bFile = mkTabBtn("file", t("import.tab.file"));
+  const bText = mkTabBtn("text", t("import.tab.text"));
+  tabs.append(bFile, bText);
+  bFile.classList.add("sel");
+
+  function show(id: TabId) {
+    content.innerHTML = "";
+    clearFoot();
+    if (id === "file") {
+      content.append(el("p", "hint", t("import.file.hint")));
+      const pick = el("button", "btn primary block", t("import.file.choose"));
+      pick.onclick = async () => {
+        const path = await open({
+          multiple: false,
+          filters: [{ name: "Backups", extensions: ["json", "txt", "authme", "aegis"] }],
+        });
+        if (!path || typeof path !== "string") return;
+        try {
+          const preview = await api.importFile(path, null);
+          if (preview.needs_password) {
+            passwordStep(content, h, (pw) => api.importFile(path, pw));
+          } else {
+            h.close();
+            openImportPreview(preview);
+          }
+        } catch (e) {
+          toast(fmtError(e), true);
+        }
+      };
+      content.append(pick);
+    } else {
+      const ta = el("textarea");
+      ta.placeholder = "otpauth://totp/…  —  or paste an Aegis/Authio/Authme JSON backup, or an otpauth-migration:// link";
+      const err = el("div", "errline");
+      const go = el("button", "btn primary", t("import.text.submit"));
+      go.onclick = async () => {
+        err.textContent = "";
+        if (!ta.value.trim()) return;
+        go.disabled = true;
+        try {
+          const preview = await api.importText(ta.value, null);
+          if (preview.needs_password) {
+            passwordStep(content, h, (pw) => api.importText(ta.value, pw));
+            go.disabled = false;
+          } else {
+            h.close();
+            openImportPreview(preview);
+          }
+        } catch (e) {
+          err.textContent = fmtError(e);
+          go.disabled = false;
+        }
+      };
+      content.append(field(t("import.text.label"), ta), err);
+      const cancel = el("button", "btn", t("common.cancel"));
+      cancel.onclick = () => h.close();
+      h.modal.append(footer(cancel, go));
+    }
+  }
+
+  function passwordStep(host: HTMLElement, handle: ModalHandle, retry: (pw: string) => Promise<PreviewDto>) {
+    handle.modal.querySelector(".mfoot")?.remove();
+    host.innerHTML = "";
+    const pw = el("input") as HTMLInputElement;
+    pw.type = "password";
+    pw.placeholder = "••••••••";
+    const err = el("div", "errline");
+    const back = el("button", "btn", t("common.back"));
+    back.onclick = () => {
+      handle.close();
+      openImportModal();
+    };
+    const go = el("button", "btn primary", t("import.password.submit"));
+    go.onclick = async () => {
+      err.textContent = "";
+      go.disabled = true;
+      try {
+        const preview = await retry(pw.value);
+        handle.close();
+        openImportPreview(preview);
+      } catch (e) {
+        err.textContent = fmtError(e);
+        go.disabled = false;
+      }
+    };
+    const wrap = el("div");
+    const h3 = el("h3", "", t("import.password.title"));
+    h3.style.cssText = "font-size:14px;margin:4px 0";
+    wrap.append(h3, el("p", "hint", t("import.password.hint")), pw, err);
+    host.append(wrap);
+    handle.modal.append(footer(back, go));
+    pw.focus();
+  }
+}
+
+function openImportPreview(preview: PreviewDto) {
+  const h = openModal(t("import.preview.title"));
+  const meta = el("div", "pv-meta");
+  meta.append(el("span", "", `${t("import.preview.format")}:`));
+  const fmt = el("span", "badge blue", preview.format);
+  meta.append(fmt);
+  if (preview.skipped > 0) meta.append(el("span", "", t("import.preview.skipped", { n: preview.skipped })));
+  h.body.append(meta);
+
+  const selected = new Set<number>();
+  preview.entries.forEach((e) => {
+    if (!e.duplicate) selected.add(e.index);
+  });
+
+  const sel = el("button", "tab", t("import.preview.selectall"));
+  sel.style.marginTop = "6px";
+
+  if (preview.entries.length === 0) {
+    h.body.append(el("p", "hint", t("import.preview.none")));
+    const done = el("button", "btn", t("common.close"));
+    done.onclick = () => h.close();
+    h.modal.append(footer(done));
+    return;
+  }
+
+  const list = el("div", "pv-list");
+  const rows: HTMLInputElement[] = [];
+  for (const e of preview.entries) {
+    const row = el("label");
+    row.className = `pv-row${e.duplicate ? " duplicate" : ""}`;
+    const cb = el("input") as HTMLInputElement;
+    cb.type = "checkbox";
+    cb.checked = !e.duplicate;
+    cb.onchange = () => {
+      if (cb.checked) selected.add(e.index);
+      else selected.delete(e.index);
+      updateGo();
+    };
+    rows.push(cb);
+    const metaCol = el("div");
+    const issuerLine = el("div", "issuer", e.issuer || e.name);
+    if (e.duplicate) issuerLine.append(el("span", "badge", t("import.preview.dupe")));
+    metaCol.append(issuerLine, el("div", "name", `${e.issuer ? e.name : ""} · ${e.kind.toUpperCase()} · ${e.digits} digits`));
+    row.append(cb, metaCol);
+    list.append(row);
+  }
+  sel.onclick = () => {
+    rows.forEach((cb, i) => {
+      cb.checked = true;
+      selected.add(preview.entries[i].index);
+    });
+    updateGo();
+  };
+
+  const cancel = el("button", "btn", t("common.cancel"));
+  cancel.onclick = () => h.close();
+  const go = el("button", "btn primary");
+  function updateGo() {
+    go.textContent = t("import.preview.submit", { n: selected.size });
+    go.disabled = selected.size === 0;
+  }
+  updateGo();
+  go.onclick = async () => {
+    go.disabled = true;
+    try {
+      const added = await api.importApply([...selected]);
+      toast(t("toast.imported", { n: added.length }));
+      h.close();
+      await refresh();
+    } catch (e) {
+      toast(fmtError(e), true);
+      h.close();
+    }
+  };
+  h.body.append(sel, list);
+  h.modal.append(footer(cancel, go));
+}
+
+/* --------------------------------------------------------------- export flow */
+function openExportModal() {
+  if (accounts.length === 0) {
+    toast(t("export.empty"), true);
+    return;
+  }
+  const h = openModal(t("export.title"));
+  let encrypted = true;
+
+  const radio = el("div", "mode-cards");
+  const mkRadio = (sel: boolean, ic: IconName, title: string, desc: string) => {
+    const c = el("button", `mode-card${sel ? " sel" : ""}`);
+    c.type = "button";
+    const tl = el("div", "t");
+    tl.append(icon(ic), document.createTextNode(title));
+    c.append(tl, el("div", "d", desc));
+    return c;
+  };
+  const cEnc = mkRadio(true, "lock", t("export.encrypted"), t("export.encrypted.desc"));
+  const cPlain = mkRadio(false, "alert", t("export.plain"), t("export.plain.desc"));
+  radio.append(cEnc, cPlain);
+
+  const encFields = el("div");
+  const pw1 = el("input") as HTMLInputElement;
+  pw1.type = "password";
+  pw1.placeholder = t("export.password");
+  const pw2 = el("input") as HTMLInputElement;
+  pw2.type = "password";
+  pw2.placeholder = t("export.password2");
+  encFields.append(field("", pw1), field("", pw2));
+  (encFields.querySelectorAll("label:empty") as NodeListOf<HTMLElement>).forEach((l) => l.remove());
+
+  const plainFields = el("div");
+  const warn = el("div", "banner");
+  warn.append(icon("alert"), document.createTextNode(t("export.plain.warn")));
+  warn.style.borderColor = "color-mix(in srgb, var(--danger) 40%, transparent)";
+  warn.style.background = "color-mix(in srgb, var(--danger) 8%, transparent)";
+  const ack = el("label", "pv-row");
+  ack.style.cursor = "pointer";
+  const ackCb = el("input") as HTMLInputElement;
+  ackCb.type = "checkbox";
+  ack.append(ackCb, el("div", "issuer", t("export.plain.ack")));
+  plainFields.append(warn, ack);
+  plainFields.style.display = "none";
+
+  const masterField = el("div");
+  let master: HTMLInputElement | null = null;
+  if (statusInfo?.mode === "password") {
+    master = el("input") as HTMLInputElement;
+    master.type = "password";
+    master.placeholder = t("export.master");
+    masterField.append(field("", master));
+    (masterField.querySelector("label:empty") as HTMLElement | null)?.remove();
+  }
+
+  cEnc.onclick = () => {
+    encrypted = true;
+    cEnc.classList.add("sel");
+    cPlain.classList.remove("sel");
+    encFields.style.display = "";
+    plainFields.style.display = "none";
+  };
+  cPlain.onclick = () => {
+    encrypted = false;
+    cPlain.classList.add("sel");
+    cEnc.classList.remove("sel");
+    encFields.style.display = "none";
+    plainFields.style.display = "";
+  };
+
+  const err = el("div", "errline");
+  const cancel = el("button", "btn", t("common.cancel"));
+  cancel.onclick = () => h.close();
+  const go = el("button", "btn primary", t("export.submit"));
+  go.onclick = async () => {
+    err.textContent = "";
+    if (encrypted) {
+      if (pw1.value.length < 8) {
+        err.textContent = t("export.password");
+        return;
+      }
+      if (pw1.value !== pw2.value) {
+        err.textContent = t("export.mismatch");
+        return;
+      }
+    } else if (!ackCb.checked) {
+      err.textContent = t("export.plain.ack");
+      return;
+    }
+    const day = new Date().toISOString().slice(0, 10);
+    const path = await save({
+      defaultPath: `authio-backup-${day}.json`,
+      filters: [{ name: "Authio backup", extensions: ["json"] }],
+    });
+    if (!path) return;
+    go.disabled = true;
+    try {
+      const msg = await api.exportBackup(
+        path,
+        encrypted,
+        encrypted ? pw1.value : null,
+        master ? master.value : null,
+      );
+      pw1.value = pw2.value = "";
+      if (master) master.value = "";
+      h.close();
+      toast(msg);
+    } catch (e) {
+      err.textContent = fmtError(e);
+      go.disabled = false;
+    }
+  };
+  h.body.append(radio, encFields, plainFields, masterField, err);
+  h.modal.append(footer(cancel, go));
+}
+
+/*------------------------------------------------------------- settings modal */
+function openSettingsModal() {
+  const h = openModal(t("settings.title"));
+
+  const save = async () => {
+    applyVisualSettings();
+    try {
+      await api.setSettings({ ...settings });
+    } catch (e) {
+      toast(fmtError(e), true);
+    }
+  };
+
+  const mkRow = (title: string, desc: string | null, control: HTMLElement) => {
+    const row = el("div", "set-row");
+    const l = el("div", "l");
+    l.append(el("div", "t", title));
+    if (desc) l.append(el("div", "d", desc));
+    row.append(l, control);
+    return row;
+  };
+
+  // theme
+  const themeSel = el("select") as HTMLSelectElement;
+  themeSel.append(
+    new Option(t("settings.theme.system"), "system"),
+    new Option(t("settings.theme.light"), "light"),
+    new Option(t("settings.theme.dark"), "dark"),
+  );
+  themeSel.value = settings.theme;
+  themeSel.onchange = () => {
+    settings.theme = themeSel.value;
+    void save();
+  };
+
+  // density
+  const densSel = el("select") as HTMLSelectElement;
+  densSel.append(new Option(t("settings.density.compact"), "compact"), new Option(t("settings.density.comfortable"), "comfortable"));
+  densSel.value = settings.density;
+  densSel.onchange = () => {
+    settings.density = densSel.value;
+    void save();
+  };
+
+  // code size
+  const fontRange = el("input") as HTMLInputElement;
+  fontRange.type = "range";
+  fontRange.min = "80";
+  fontRange.max = "140";
+  fontRange.step = "5";
+  fontRange.value = String(settings.font_scale);
+  fontRange.oninput = () => {
+    settings.font_scale = Number(fontRange.value);
+    applyVisualSettings();
+  };
+  fontRange.onchange = () => void save();
+
+  // alphabetical
+  const alphaSw = el("input", "switch") as HTMLInputElement;
+  alphaSw.type = "checkbox";
+  alphaSw.checked = settings.sort_alpha;
+  alphaSw.onchange = () => {
+    settings.sort_alpha = alphaSw.checked;
+    void save();
+    renderList();
+    void pollCodes();
+  };
+
+  // hide codes
+  const hideSw = el("input", "switch") as HTMLInputElement;
+  hideSw.type = "checkbox";
+  hideSw.checked = settings.hide_codes;
+  hideSw.onchange = () => {
+    settings.hide_codes = hideSw.checked;
+    hidden.clear();
+    if (settings.hide_codes) accounts.forEach((a) => hidden.add(a.id));
+    void save();
+    renderList();
+    void pollCodes();
+  };
+
+  // auto lock minutes
+  const lockNum = el("input") as HTMLInputElement;
+  lockNum.type = "number";
+  lockNum.min = "0";
+  lockNum.max = "240";
+  lockNum.value = String(settings.auto_lock_minutes);
+  const lockWrap = el("div");
+  lockWrap.style.cssText = "display:flex;align-items:center;gap:6px";
+  lockWrap.append(lockNum, el("span", "", t("settings.autolock.minutes")));
+  lockNum.onchange = () => {
+    settings.auto_lock_minutes = Math.max(0, Math.min(240, Number(lockNum.value || 0)));
+    lockNum.value = String(settings.auto_lock_minutes);
+    void save();
+  };
+
+  // lock on minimize
+  const minSw = el("input", "switch") as HTMLInputElement;
+  minSw.type = "checkbox";
+  minSw.checked = settings.lock_on_minimize;
+  minSw.onchange = () => {
+    settings.lock_on_minimize = minSw.checked;
+    void save();
+  };
+
+  h.body.append(
+    mkRow(t("settings.theme"), null, themeSel),
+    mkRow(t("settings.density"), null, densSel),
+    mkRow(t("settings.font"), null, fontRange),
+    mkRow(t("settings.sort_alpha"), null, alphaSw),
+    mkRow(t("settings.hide_codes"), null, hideSw),
+    mkRow(t("settings.autolock"), t("settings.autolock.off"), lockWrap),
+    mkRow(t("settings.lock_minimize"), null, minSw),
+    el("div", "about", t("settings.about", { v: "0.1.0" })),
+  );
+
+  const done = el("button", "btn primary", t("common.close"));
+  done.onclick = () => h.close();
+  h.modal.append(footer(done));
+}
+
+/* --------------------------------------------------------------- edit modal */
+function openEditModal(a: AccountDto) {
+  const h = openModal(t("card.edit"));
+  const issuer = el("input") as HTMLInputElement;
+  issuer.value = a.issuer;
+  const name = el("input") as HTMLInputElement;
+  name.value = a.name;
+  const err = el("div", "errline");
+  const cancel = el("button", "btn", t("common.cancel"));
+  cancel.onclick = () => h.close();
+  const go = el("button", "btn primary", t("common.save"));
+  go.onclick = async () => {
+    try {
+      await api.updateAccount(a.id, issuer.value, name.value);
+      toast(t("toast.updated"));
+      h.close();
+      await refresh();
+    } catch (e) {
+      err.textContent = fmtError(e);
+    }
+  };
+  h.body.append(
+    field(t("add.manual.issuer"), issuer),
+    field(t("add.manual.name"), name),
+    el("p", "hint", `${a.kind.toUpperCase()} · ${a.algorithm} · ${a.digits} digits${a.kind === "totp" ? ` · ${a.period}s` : ""}`),
+    err,
+  );
+  h.modal.append(footer(cancel, go));
+}
+
+/* -------------------------------------------------------------- reveal modal */
+function openRevealModal(a: AccountDto) {
+  const h = openModal(t("reveal.title"));
+  const show = (secret: string, uri: string) => {
+    h.body.innerHTML = "";
+    const grp = secret.replace(/(.{4})(?=.)/g, "$1 ");
+    h.body.append(
+      el("label", "lbl", t("reveal.secret")),
+      secretBox(grp),
+      el("label", "lbl", t("reveal.uri")),
+      secretBox(uri),
+      el("p", "hint", t("reveal.hint")),
+    );
+    function secretBox(text: string): HTMLElement {
+      const row = el("div");
+      row.style.cssText = "display:flex;gap:6px;align-items:flex-start";
+      const box = el("div", "mono-box", text);
+      box.style.flex = "1";
+      const c = iconBtn("copy", t("code.copy"));
+      c.onclick = () => void copyText(text.replaceAll(" ", ""));
+      row.append(box, c);
+      return row;
+    }
+  };
+
+  if (statusInfo?.mode !== "password") {
+    api
+      .revealSecret(a.id)
+      .then((s) => show(s.secret, s.uri))
+      .catch((e) => {
+        h.close();
+        toast(fmtError(e), true);
+      });
+    return;
+  }
+  const pw = el("input") as HTMLInputElement;
+  pw.type = "password";
+  pw.placeholder = t("reveal.master");
+  const err = el("div", "errline");
+  const cancel = el("button", "btn", t("common.cancel"));
+  cancel.onclick = () => h.close();
+  const go = el("button", "btn primary", t("reveal.submit"));
+  go.onclick = async () => {
+    err.textContent = "";
+    try {
+      const s = await api.revealSecret(a.id, pw.value);
+      pw.value = "";
+      h.modal.querySelector(".mfoot")?.remove();
+      show(s.secret, s.uri);
+    } catch (e) {
+      err.textContent = fmtError(e);
+    }
+  };
+  h.body.append(field("", pw), err);
+  (h.body.querySelector("label:empty") as HTMLElement | null)?.remove();
+  h.modal.append(footer(cancel, go));
+  pw.focus();
+}
+
+/* --------------------------------------------------------------------- boot */
+async function boot() {
+  applyVisualSettings();
+  try {
+    settings = { ...settings, ...(await api.getSettings()) };
+  } catch {
+    /* defaults */
+  }
+  applyVisualSettings();
+
+  await listen("authio://locked", async () => {
+    await refreshStatus().catch(() => undefined);
+    renderLock(true);
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && route === "main") void pollCodes();
+  });
+
+  // Global shortcuts: Ctrl+F search · Ctrl+L lock · Ctrl+, settings
+  window.addEventListener("keydown", (e) => {
+    if (route !== "main" || !e.ctrlKey) return;
+    const k = e.key.toLowerCase();
+    if (k === "f") {
+      e.preventDefault();
+      document.querySelector<HTMLInputElement>(".searchrow input")?.focus();
+    } else if (k === "l") {
+      e.preventDefault();
+      void api.lock().catch(() => undefined);
+      void refreshStatus().then(() => renderLock());
+    } else if (k === ",") {
+      e.preventDefault();
+      openSettingsModal();
+    }
+  });
+
+  try {
+    await refreshStatus();
+  } catch (e) {
+    toast(fmtError(e), true);
+  }
+
+  // 1 Hz code pump.
+  setInterval(() => void pollCodes(), 1000);
+
+  if (!statusInfo?.initialized) renderSetup();
+  else if (!statusInfo.unlocked) renderLock();
+  else await enterMain();
+}
+
+void boot();
