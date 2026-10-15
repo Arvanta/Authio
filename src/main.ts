@@ -5,7 +5,7 @@
  */
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { AccountDto, CodeDto, PreviewDto, Settings, StatusDto, api } from "./api";
+import { AccountDto, CodeDto, PreviewDto, Settings, StatusDto, UnlockMode, api } from "./api";
 import { t } from "./i18n";
 import "./styles.css";
 
@@ -36,6 +36,8 @@ const ICONS = {
   alert:
     '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0ZM12 9v4m0 4h.01"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13M4 6h.01M4 12h.01M4 18h.01"/>',
+  grid: '<rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/>',
 } as const;
 type IconName = keyof typeof ICONS;
 
@@ -178,6 +180,7 @@ let settings: Settings = {
   hide_codes: true,
   auto_lock_minutes: 5,
   lock_on_minimize: true,
+  view_mode: "rows",
 };
 let accounts: AccountDto[] = [];
 let search = "";
@@ -244,7 +247,7 @@ function renderSetup() {
   h2.textContent = t("setup.title");
   h2.style.cssText = "font-size:16px;margin-bottom:6px";
 
-  let mode: "password" | "keychain" = "password";
+  let mode: UnlockMode = "password";
   const cards = el("div", "mode-cards");
   const mkCard = (m: typeof mode, title: string, desc: string, ic: IconName) => {
     const c = el("button", "mode-card");
@@ -261,7 +264,8 @@ function renderSetup() {
   };
   const cPw = mkCard("password", t("setup.mode.password"), t("setup.mode.password.desc"), "key");
   const cKc = mkCard("keychain", t("setup.mode.keychain"), t("setup.mode.keychain.desc"), "shield");
-  cards.append(cPw, cKc);
+  const cNone = mkCard("none", t("setup.mode.none"), t("setup.mode.none.desc"), "alert");
+  cards.append(cPw, cKc, cNone);
   cPw.classList.add("sel");
 
   const pw1 = el("input") as HTMLInputElement;
@@ -324,7 +328,15 @@ function renderLock(auto = false) {
 
   const mode = statusInfo?.mode ?? "password";
   panel.append(
-    el("p", "sub", mode === "password" ? t("lock.subtitle.password") : t("lock.subtitle.keychain")),
+    el(
+      "p",
+      "sub",
+      mode === "password"
+        ? t("lock.subtitle.password")
+        : mode === "keychain"
+          ? t("lock.subtitle.keychain")
+          : t("lock.subtitle.none"),
+    ),
   );
   if (auto) {
     const b = el("div", "banner");
@@ -397,6 +409,36 @@ function grouped(code: string): string {
   return code.replace(/(\d{3})(?=\d)/g, "$1 ");
 }
 
+function buildTimer(period: number): {
+  wrap: HTMLElement;
+  fill: SVGCircleElement;
+  remain: HTMLElement;
+} {
+  const wrap = el("div", "timercol");
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("class", "ring");
+  svg.setAttribute("viewBox", "0 0 28 28");
+  const mk = (cls: string) => {
+    const c = document.createElementNS(svgNS, "circle");
+    c.setAttribute("class", cls);
+    c.setAttribute("cx", "14");
+    c.setAttribute("cy", "14");
+    c.setAttribute("r", "11.5");
+    c.setAttribute("fill", "none");
+    c.setAttribute("stroke-width", cls === "fill" ? "3" : "2.6");
+    return c;
+  };
+  const track = mk("track");
+  const fill = mk("fill") as SVGCircleElement;
+  fill.setAttribute("stroke-dasharray", "72.26");
+  fill.setAttribute("stroke-dashoffset", "0");
+  svg.append(track, fill);
+  const remain = el("span", "remain", String(period));
+  wrap.append(svg, remain);
+  return { wrap, fill, remain };
+}
+
 function accountCard(a: AccountDto): HTMLElement {
   const card = el("div", "card");
   card.dataset.id = a.id;
@@ -416,30 +458,10 @@ function accountCard(a: AccountDto): HTMLElement {
   let remain: HTMLElement | null = null;
   let fill: SVGCircleElement | null = null;
   if (!isHotp) {
-    const timercol = el("div", "timercol");
-    const svgNS = "http://www.w3.org/2000/svg";
-    const svg = document.createElementNS(svgNS, "svg");
-    svg.setAttribute("class", "ring");
-    svg.setAttribute("viewBox", "0 0 24 24");
-    const mk = (cls: string) => {
-      const c = document.createElementNS(svgNS, "circle");
-      c.setAttribute("class", cls);
-      c.setAttribute("cx", "12");
-      c.setAttribute("cy", "12");
-      c.setAttribute("r", "9");
-      c.setAttribute("fill", "none");
-      c.setAttribute("stroke-width", cls === "fill" ? "3" : "2.5");
-      return c;
-    };
-    const track = mk("track");
-    const f = mk("fill") as SVGCircleElement;
-    f.setAttribute("stroke-dasharray", "56.55");
-    f.setAttribute("stroke-dashoffset", "0");
-    svg.append(track, f);
-    fill = f;
-    remain = el("div", "remain", a.period + "s");
-    timercol.append(svg, remain);
-    codecol.append(code, timercol);
+    const timer = buildTimer(a.period);
+    remain = timer.remain;
+    fill = timer.fill;
+    codecol.append(code, timer.wrap);
   } else {
     codecol.append(code);
   }
@@ -516,7 +538,8 @@ function accountCard(a: AccountDto): HTMLElement {
     }
   };
 
-  actions.append(copyB, pinB, editB, secretB, delB);
+  // Right-edge order: timer ring → code → copy → pin → hover-ghost actions.
+  actions.append(editB, secretB, delB, pinB, copyB, codecol);
 
   // Drag & drop manual reorder (disabled while filtering or alpha-sorting).
   const dnd = !settings.sort_alpha && !search;
@@ -554,7 +577,105 @@ function accountCard(a: AccountDto): HTMLElement {
     });
   }
 
-  card.append(avatar, meta, codecol, actions);
+  card.append(avatar, meta, actions);
+  return card;
+}
+
+function tileCard(a: AccountDto): HTMLElement {
+  const card = el("div", "card tile");
+  card.dataset.id = a.id;
+  const isHotp = a.kind === "hotp";
+
+  // Header: issuer (+ account) on the left, timer ring on the right.
+  const head = el("div", "t-head");
+  const iss = el("div", "t-issuer");
+  iss.append(document.createTextNode(a.issuer || a.name || "?"));
+  if (a.issuer && a.name) iss.append(el("span", "t-name", " / " + a.name));
+  head.append(iss);
+
+  let remain: HTMLElement | null = null;
+  let fill: SVGCircleElement | null = null;
+  if (!isHotp) {
+    const timer = buildTimer(a.period);
+    remain = timer.remain;
+    fill = timer.fill;
+    head.append(timer.wrap);
+  }
+
+  const code = el("div", "code t-code" + (isHotp ? "" : " hidden-code"), isHotp ? "•••" : "••• •••");
+  code.title = isHotp ? t("code.next") : t("code.reveal");
+  tickRefs.set(a.id, { code, remain, fill, dots: true });
+
+  const copyB = iconBtn("copy", t("code.copy"));
+  copyB.onclick = async () => {
+    const dto = await latestCode(a);
+    const value = isHotp ? lastHotp.get(a.id)?.code : dto?.code ?? undefined;
+    if (!value) {
+      if (isHotp) await doHotp(a);
+      else hidden.delete(a.id);
+      void pollCodes();
+      return;
+    }
+    const ok = await copyText(value);
+    if (ok) {
+      copyB.innerHTML = "";
+      copyB.append(icon("check"));
+      setTimeout(() => {
+        copyB.innerHTML = "";
+        copyB.append(icon("copy"));
+      }, 1100);
+    }
+  };
+
+  code.onclick = async () => {
+    if (isHotp) {
+      await doHotp(a);
+      return;
+    }
+    if (hidden.has(a.id)) {
+      hidden.delete(a.id);
+    } else {
+      const dto = await latestCode(a);
+      if (dto?.code) await copyText(dto.code);
+    }
+    void pollCodes();
+  };
+
+  const pinB = iconBtn("star", a.pinned ? t("card.unpin") : t("card.pin"));
+  if (a.pinned) pinB.classList.add("on");
+  pinB.onclick = async () => {
+    await api.setPinned(a.id, !a.pinned);
+    await refresh();
+  };
+
+  const editB = iconBtn("pencil", t("card.edit"), "ghost");
+  editB.onclick = () => openEditModal(a);
+  const secretB = iconBtn("key", t("card.secret"), "ghost");
+  secretB.onclick = () => openRevealModal(a);
+  const delB = iconBtn("trash", t("card.delete"), "ghost");
+  delB.onclick = async () => {
+    const ok = await confirmBox(
+      t("delete.title"),
+      t("delete.msg", { issuer: a.issuer || "—", name: a.name }),
+      t("delete.confirm"),
+      true,
+    );
+    if (ok) {
+      try {
+        await api.deleteAccount(a.id);
+        hidden.delete(a.id);
+        toast(t("toast.deleted"));
+        await refresh();
+      } catch (e) {
+        toast(fmtError(e), true);
+      }
+    }
+  };
+
+  const foot = el("div", "t-foot actions");
+  foot.append(editB, secretB, delB, el("div", "spacer"), pinB, copyB);
+
+  card.append(head, code, foot);
   return card;
 }
 
@@ -604,10 +725,10 @@ function applyCodes(codes: CodeDto[]) {
       ref.code.title = t("code.copy");
     }
     if (ref.fill) {
-      ref.fill.style.strokeDashoffset = String(56.55 * (1 - dto.progress));
+      ref.fill.style.strokeDashoffset = String(72.26 * (1 - dto.progress));
       ref.fill.style.stroke = dto.remaining <= 5 ? "var(--danger)" : "";
     }
-    if (ref.remain) ref.remain.textContent = `${dto.remaining}s`;
+    if (ref.remain) ref.remain.textContent = String(dto.remaining);
   }
 }
 
@@ -633,6 +754,8 @@ let listHost: HTMLElement;
 
 function renderList() {
   tickRefs.clear();
+  const tiles = settings.view_mode === "tiles";
+  listHost.classList.toggle("tiles", tiles);
   listHost.innerHTML = "";
   if (accounts.length === 0) {
     const empty = el("div", "empty");
@@ -643,6 +766,7 @@ function renderList() {
     return;
   }
   const { pinned, rest } = sortedFiltered();
+  const mkCard = tiles ? tileCard : accountCard;
   const q = search.trim();
   if (pinned.length === 0 && rest.length === 0 && q) {
     const empty = el("div", "empty");
@@ -652,21 +776,30 @@ function renderList() {
   }
   if (pinned.length) {
     listHost.append(el("div", "section-label", t("main.pinned")));
-    pinned.forEach((a) => listHost.append(accountCard(a)));
+    pinned.forEach((a) => listHost.append(mkCard(a)));
     if (rest.length) listHost.append(el("div", "section-label", t("main.accounts")));
   }
-  rest.forEach((a) => listHost.append(accountCard(a)));
+  rest.forEach((a) => listHost.append(mkCard(a)));
 }
 
 function renderMain() {
   setRoute("main");
 
-  // --- top bar
+  // --- top bar: search on the left, actions on the right (no duplicate brand —
+  // the window title already says "Authio").
   const top = el("div", "topbar");
-  const brand = el("div", "brand");
-  const logo = el("div", "logo");
-  logo.append(icon("shield"));
-  brand.append(logo, el("h1", "", t("app.name")));
+
+  const sinput = el("input") as HTMLInputElement;
+  sinput.type = "search";
+  sinput.placeholder = t("main.search");
+  sinput.value = search;
+  sinput.oninput = () => {
+    search = sinput.value;
+    renderList();
+    void pollCodes();
+  };
+  const sbox = el("div", "searchin");
+  sbox.append(sinput, icon("mag", "mag"));
 
   const eyeAll = iconBtn(settings.hide_codes ? "eyeOff" : "eye", t("main.showall"));
   eyeAll.onclick = () => {
@@ -706,24 +839,25 @@ function renderMain() {
     renderLock();
   };
 
-  top.append(brand, el("div", "spacer"), eyeAll, addB, importB, exportB, gearB, lockB);
-
-  // --- search
-  const srow = el("div", "searchrow");
-  const sinput = el("input") as HTMLInputElement;
-  sinput.type = "search";
-  sinput.placeholder = t("main.search");
-  sinput.value = search;
-  sinput.oninput = () => {
-    search = sinput.value;
+  // View toggle: shows the icon of the style you will switch to.
+  const viewB = iconBtn(settings.view_mode === "tiles" ? "list" : "grid", t("main.view"));
+  viewB.onclick = async () => {
+    settings.view_mode = settings.view_mode === "tiles" ? "rows" : "tiles";
+    viewB.innerHTML = "";
+    viewB.append(icon(settings.view_mode === "tiles" ? "list" : "grid"));
+    try {
+      await api.setSettings({ ...settings });
+    } catch {
+      /* keep local state */
+    }
     renderList();
     void pollCodes();
   };
-  const mag = icon("mag", "mag");
-  srow.append(sinput, mag);
+
+  top.append(sbox, viewB, eyeAll, addB, importB, exportB, gearB, lockB);
 
   listHost = el("div", "list");
-  app.append(top, srow, listHost);
+  app.append(top, listHost);
   renderList();
 }
 
@@ -1295,20 +1429,152 @@ function openSettingsModal() {
     void save();
   };
 
+  // view style (rows / tiles)
+  const viewSel = el("select") as HTMLSelectElement;
+  viewSel.append(new Option(t("settings.view.rows"), "rows"), new Option(t("settings.view.tiles"), "tiles"));
+  viewSel.value = settings.view_mode === "tiles" ? "tiles" : "rows";
+  viewSel.onchange = () => {
+    settings.view_mode = viewSel.value;
+    void save();
+    renderList();
+    void pollCodes();
+  };
+
+  // ---- security: change unlock method / master password
+  const secTitle = el("div", "section-label", t("settings.security"));
+  secTitle.style.margin = "10px 0 0";
+  const curMode = statusInfo?.mode ?? "password";
+  const modeLabel = el("div", "", t("settings.mode." + curMode));
+  modeLabel.style.cssText = "font-weight:600;margin-right:8px";
+  const chgB = el("button", "btn", t("settings.change"));
+  chgB.onclick = () =>
+    openChangeUnlockModal((m) => {
+      modeLabel.textContent = t("settings.mode." + m);
+    });
+  const modeWrap = el("div");
+  modeWrap.style.cssText = "display:flex;align-items:center";
+  modeWrap.append(modeLabel, chgB);
+
   h.body.append(
     mkRow(t("settings.theme"), null, themeSel),
     mkRow(t("settings.density"), null, densSel),
     mkRow(t("settings.font"), null, fontRange),
+    mkRow(t("settings.view"), null, viewSel),
     mkRow(t("settings.sort_alpha"), null, alphaSw),
     mkRow(t("settings.hide_codes"), null, hideSw),
     mkRow(t("settings.autolock"), t("settings.autolock.off"), lockWrap),
     mkRow(t("settings.lock_minimize"), null, minSw),
+    secTitle,
+    mkRow(t("settings.unlock_method"), null, modeWrap),
     el("div", "about", t("settings.about", { v: "0.1.0" })),
   );
 
   const done = el("button", "btn primary", t("common.close"));
   done.onclick = () => h.close();
   h.modal.append(footer(done));
+}
+
+/* -------------------------------------------------- change unlock method */
+function openChangeUnlockModal(onDone?: (m: UnlockMode) => void) {
+  const h = openModal(t("chg.title"));
+  const curMode: UnlockMode = statusInfo?.mode ?? "password";
+  let target: UnlockMode = curMode;
+
+  const upd = () => {
+    curWrap.style.display = curMode === "password" ? "" : "none";
+    newWrap.style.display = target === "password" ? "" : "none";
+    warn.style.display = target === "none" ? "" : "none";
+    cards.querySelectorAll(".mode-card").forEach((n) => {
+      n.classList.toggle("sel", targetFor.get(n as HTMLElement) === target);
+    });
+  };
+
+  const targetFor = new Map<HTMLElement, UnlockMode>();
+  const cards = el("div", "mode-cards");
+  const mkModeCard = (m: UnlockMode, title: string, ic: IconName) => {
+    const c = el("button", "mode-card");
+    c.type = "button";
+    const tl = el("div", "t");
+    tl.append(icon(ic), document.createTextNode(title));
+    c.append(tl);
+    targetFor.set(c, m);
+    c.onclick = () => {
+      target = m;
+      upd();
+    };
+    return c;
+  };
+  cards.append(
+    mkModeCard("password", t("settings.mode.password"), "key"),
+    mkModeCard("keychain", t("settings.mode.keychain"), "shield"),
+    mkModeCard("none", t("settings.mode.none"), "alert"),
+  );
+
+  const curPw = el("input") as HTMLInputElement;
+  curPw.type = "password";
+  curPw.placeholder = t("chg.current");
+  curPw.autocomplete = "current-password";
+  const curWrap = el("div");
+  curWrap.append(field("", curPw));
+  (curWrap.querySelectorAll("label") as NodeListOf<HTMLElement>).forEach((l) => l.remove());
+
+  const new1 = el("input") as HTMLInputElement;
+  new1.type = "password";
+  new1.placeholder = t("chg.new_password");
+  new1.autocomplete = "new-password";
+  const new2 = el("input") as HTMLInputElement;
+  new2.type = "password";
+  new2.placeholder = t("chg.new_password2");
+  new2.autocomplete = "new-password";
+  const newWrap = el("div");
+  newWrap.append(field("", new1), field("", new2));
+  (newWrap.querySelectorAll("label") as NodeListOf<HTMLElement>).forEach((l) => l.remove());
+
+  const warn = el("div", "banner danger");
+  warn.append(icon("alert"), document.createTextNode(t("chg.none.warn")));
+
+  const err = el("div", "errline");
+  const go = el("button", "btn primary", t("chg.submit"));
+  const cancel = el("button", "btn", t("common.cancel"));
+  cancel.onclick = () => h.close();
+
+  go.onclick = async () => {
+    err.textContent = "";
+    if (target === "password") {
+      if (new1.value.length < 8) {
+        err.textContent = t("chg.new_password");
+        return;
+      }
+      if (new1.value !== new2.value) {
+        err.textContent = t("chg.mismatch");
+        return;
+      }
+    }
+    if (curMode === "password" && !curPw.value) {
+      err.textContent = t("chg.current");
+      return;
+    }
+    go.disabled = true;
+    try {
+      await api.changeUnlockMode(
+        target,
+        curMode === "password" ? curPw.value : undefined,
+        target === "password" ? new1.value : undefined,
+      );
+      curPw.value = new1.value = new2.value = "";
+      await refreshStatus();
+      onDone?.(target);
+      toast(t("chg.done"));
+      h.close();
+    } catch (e) {
+      err.textContent = fmtError(e);
+      go.disabled = false;
+    }
+  };
+
+  h.body.append(cards, curWrap, newWrap, warn, err);
+  h.modal.append(footer(cancel, go));
+  upd();
 }
 
 /* --------------------------------------------------------------- edit modal */
@@ -1425,7 +1691,7 @@ async function boot() {
     const k = e.key.toLowerCase();
     if (k === "f") {
       e.preventDefault();
-      document.querySelector<HTMLInputElement>(".searchrow input")?.focus();
+      document.querySelector<HTMLInputElement>(".searchin input")?.focus();
     } else if (k === "l") {
       e.preventDefault();
       void api.lock().catch(() => undefined);
@@ -1445,9 +1711,24 @@ async function boot() {
   // 1 Hz code pump.
   setInterval(() => void pollCodes(), 1000);
 
-  if (!statusInfo?.initialized) renderSetup();
-  else if (!statusInfo.unlocked) renderLock();
-  else await enterMain();
+  if (!statusInfo?.initialized) {
+    renderSetup();
+  } else if (!statusInfo.unlocked) {
+    // For keychain / no-security vaults, unlock once automatically at startup
+    // (manual locking via Ctrl+L still shows the lock screen afterwards).
+    const m = statusInfo.mode;
+    if (m === "keychain" || m === "none") {
+      try {
+        await api.unlock();
+        await refreshStatus();
+        await enterMain();
+        return;
+      } catch {
+        /* fall through to the lock screen */
+      }
+    }
+    renderLock();
+  } else await enterMain();
 }
 
 void boot();

@@ -20,6 +20,9 @@ pub enum Kdf {
         salt: String, // base64
     },
     Keychain,
+    /// "No security" mode: the decryption key is stored inside the vault itself
+    /// (obfuscation only, NOT real protection). Explicitly user-chosen.
+    None { key: String }, // base64
 }
 
 impl Kdf {
@@ -27,6 +30,7 @@ impl Kdf {
         match self {
             Kdf::Argon2id { .. } => "password",
             Kdf::Keychain => "keychain",
+            Kdf::None { .. } => "none",
         }
     }
 }

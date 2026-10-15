@@ -1,6 +1,8 @@
 /** Typed wrappers around the Tauri command surface (see src-tauri/src/commands.rs). */
 import { invoke } from "@tauri-apps/api/core";
 
+export type UnlockMode = "password" | "keychain" | "none";
+
 export interface AccountDto {
   id: string;
   issuer: string;
@@ -24,7 +26,7 @@ export interface CodeDto {
 export interface StatusDto {
   initialized: boolean;
   unlocked: boolean;
-  mode: "password" | "keychain" | null;
+  mode: UnlockMode | null;
 }
 
 export interface PreviewEntry {
@@ -58,6 +60,7 @@ export interface Settings {
   hide_codes: boolean;
   auto_lock_minutes: number;
   lock_on_minimize: boolean;
+  view_mode?: "rows" | "tiles" | string;
   window?: { x: number; y: number; w: number; h: number } | null;
 }
 
@@ -74,10 +77,16 @@ export interface DraftIn {
 
 export const api = {
   status: () => invoke<StatusDto>("vault_status"),
-  setupVault: (mode: "password" | "keychain", password?: string) =>
+  setupVault: (mode: UnlockMode, password?: string) =>
     invoke<void>("setup_vault", { mode, password: password ?? null }),
   unlock: (password?: string) => invoke<void>("unlock", { password: password ?? null }),
   lock: () => invoke<void>("lock"),
+  changeUnlockMode: (mode: UnlockMode, currentPassword?: string, newPassword?: string) =>
+    invoke<void>("change_unlock_mode", {
+      mode,
+      currentPassword: currentPassword ?? null,
+      newPassword: newPassword ?? null,
+    }),
 
   listAccounts: () => invoke<AccountDto[]>("list_accounts"),
   getCodes: () => invoke<CodeDto[]>("get_codes"),
@@ -97,17 +106,13 @@ export const api = {
 
   importFile: (path: string, password: string | null) => invoke<PreviewDto>("import_file", { path, password }),
   importText: (text: string, password: string | null) => invoke<PreviewDto>("import_text", { text, password }),
-  importQr: (path: string) => import_qr(path),
+  importQr: (path: string) => invoke<PreviewDto>("import_qr", { path }),
   importApply: (indices: number[]) => invoke<AccountDto[]>("import_apply", { indices }),
 
   getSettings: () => invoke<Settings>("get_settings"),
   setSettings: (settings: Settings) => invoke<void>("set_settings", { settings }),
   userActivity: () => invoke<void>("user_activity"),
 };
-
-async function import_qr(path: string): Promise<PreviewDto> {
-  return invoke<PreviewDto>("import_qr", { path });
-}
 
 /** Storage key for UI-only ephemeral preferences (never secrets). */
 export const UI_PREFS_KEY = "authio.ui";

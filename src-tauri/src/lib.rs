@@ -63,6 +63,15 @@ pub fn run() {
                     if !state_t.is_unlocked() {
                         continue;
                     }
+                    // "No security" mode: never auto-lock (the user asked for zero friction).
+                    let no_security = state_t
+                        .session
+                        .lock()
+                        .map(|g| g.as_ref().is_some_and(|s| matches!(s.kdf, vault::Kdf::None { .. })))
+                        .unwrap_or(false);
+                    if no_security {
+                        continue;
+                    }
                     let (auto_min, lock_min) = state_t
                         .settings
                         .lock()
@@ -94,6 +103,7 @@ pub fn run() {
             commands::setup_vault,
             commands::unlock,
             commands::lock,
+            commands::change_unlock_mode,
             commands::list_accounts,
             commands::get_codes,
             commands::hotp_next,

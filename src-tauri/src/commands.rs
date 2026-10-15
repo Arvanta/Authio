@@ -238,6 +238,13 @@ pub fn setup_vault(state: State<'_, Arc<AppState>>, mode: String, password: Opti
             keyring_store(&key)?;
             (Kdf::Keychain, Zeroizing::new(key))
         }
+        "none" => {
+            let key = crypto::rand_bytes::<32>();
+            (
+                Kdf::None { key: STANDARD.encode(key) },
+                Zeroizing::new(key),
+            )
+        }
         other => return Err(format!("unknown vault mode \"{other}\"")),
     };
     vault::write_envelope(&state.vault_path, "vault", &kdf, &key, br#"{"accounts":[]}"#)?;
@@ -257,6 +264,11 @@ pub fn unlock(state: State<'_, Arc<AppState>>, password: Option<String>) -> Cmd<
             crypto::argon2id_derive(pw.as_bytes(), &salt, *m, *t, *p)?
         }
         Kdf::Keychain => keyring_load()?,
+        Kdf::None { key } => {
+            let raw = STANDARD.decode(key).map_err(|_| "corrupt vault header (key)".to_string())?;
+            let arr: [u8; 32] = raw.try_into().map_err(|_| "corrupt vault header (key length)".to_string())?;
+            Zeroizing::new(arr)
+        }
     };
     let plain = vault::decrypt_envelope(&env, &key)?; // AEAD tag fails on wrong password
     let payload: AccountsPayload =
@@ -270,6 +282,64 @@ pub fn unlock(state: State<'_, Arc<AppState>>, password: Option<String>) -> Cmd<
 #[tauri::command]
 pub fn lock(state: State<'_, Arc<AppState>>) {
     state.do_lock();
+}
+
+/// Switch the vault's unlock method (password ↔ keychain ↔ none) or change the
+/// master password. Requires the vault to be unlocked plus, when the current
+/// method is a master password, re-entering that password.
+#[tauri::command]
+pub fn change_unlock_mode(
+    state: State<'_, Arc<AppState>>,
+    mode: String,
+    current_password: Option<String>,
+    new_password: Option<String>,
+) -> Cmd<()> {
+    state.touch();
+    if vault_mode(&state)? == "password" {
+        let pw = current_password
+            .filter(|p| !p.is_empty())
+            .ok_or("enter your current master password")?;
+        if !verify_master_password(&state, &pw)? {
+            return Err("incorrect master password".into());
+        }
+    }
+
+    let session_key = with_session(&state, |s| Ok(s.key.clone()))?;
+    let (new_kdf, new_key) = match mode.as_str() {
+        "password" => {
+            let pw = new_password
+                .filter(|p| p.len() >= 8)
+                .ok_or("the new master password must be at least 8 characters")?;
+            let salt = crypto::rand_bytes::<{ crypto::SALT_LEN }>();
+            let key = crypto::argon2id_derive(pw.as_bytes(), &salt, crypto::ARGON2_M_KIB, crypto::ARGON2_T, crypto::ARGON2_P)?;
+            (
+                Kdf::Argon2id { m: crypto::ARGON2_M_KIB, t: crypto::ARGON2_T, p: crypto::ARGON2_P, salt: STANDARD.encode(salt) },
+                key,
+            )
+        }
+        "keychain" => {
+            keyring_store(&session_key)?;
+            (Kdf::Keychain, session_key)
+        }
+        "none" => (Kdf::None { key: STANDARD.encode(&*session_key) }, session_key),
+        other => return Err(format!("unknown unlock mode \"{other}\"")),
+    };
+
+    let was_keychain = with_session(&state, |s| {
+        let payload = serde_json::to_vec(&AccountsPayloadRef { accounts: &s.accounts })
+            .map_err(|e| format!("serialize failure: {e}"))?;
+        vault::write_envelope(&state.vault_path, "vault", &new_kdf, &new_key, &payload)?;
+        let was = matches!(s.kdf, Kdf::Keychain);
+        s.kdf = new_kdf.clone();
+        s.key = new_key;
+        Ok(was)
+    })?;
+    if was_keychain && mode != "keychain" {
+        if let Ok(entry) = keyring::Entry::new("Authio", "vault-key") {
+            let _ = entry.delete_credential();
+        }
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
