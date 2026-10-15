@@ -4,7 +4,7 @@
 > Languages: English, German, Spanish, French, Japanese, Korean, Portuguese, Russian, Simplified Chinese (live switchable in Settings; Persian + RTL planned). Platform: Windows (NSIS installer `.exe` + portable `.zip`).
 > Source: <https://github.com/Arvanta/Authio> — Licensed under MIT.
 
-This document is the single source of truth for Authio's scope. Features are organized into three tiers: **MVP (v1.0)**, **Complementary (v1.x)**, and **Advanced (v2+)**.
+This document is the single source of truth for Authio's scope. It describes the feature set as shipped in v1.0.
 
 **Design principles**
 
@@ -124,30 +124,14 @@ This document is the single source of truth for Authio's scope. Features are org
 
 ---
 
-## Tier 2 — Complementary (v1.x)
+## v1.0 additions (implemented)
 
-- ~~SHA-256 checksums~~ ✅
-- ~~Portable mode: `--portable`~~ ✅ (vault + settings live in `authio-data/` next to the executable)
-- ~~More importers: 2FAS, Raivo, andOTP, Bitwarden/TOTP CSV~~ ✅ (+ Steam maFile)
-- ~~System tray with minimize-to-tray~~ ✅ (Settings toggle; tray menu: show / lock / quit; the close button hides to tray)
-- ~~Single instance~~ ✅ (a second launch focuses the existing window — restoring it from the tray — and exits)
-- ~~Specialized issuers: Steam / Battle.net~~ ✅ (Steam = 5-character custom-alphabet rendering + maFile import, auto-detected from `issuer=Steam` URIs; Battle.net needs nothing special — standard TOTP SHA-1 / 8 digits / 30 s, supported from day one)
-- **Import camera scan (webcam QR)** — optional, behind a permission prompt; reuses the existing `rqrr` decode pipeline.
-- **Windows Hello unlock** (where supported by the OS credential APIs) — a fourth unlock method alongside password / keychain / none.
-
-### Suggested v1.x order (remaining)
-
-Windows Hello → Camera scan
-
----
-
-## Tier 3 — Advanced (v2+)
-
-- **i18n releases** — ~~German, Spanish, Simplified Chinese, French, Portuguese, Russian, Japanese, Korean~~ ✅ shipped in v1.0. Next: **Persian (Farsi) with complete RTL layout** (CSS logical properties, mirrored icons); then community languages. All LTR; system fonts only, no font bundling.
-- **Local-first encrypted sync** via a user-owned folder (WebDAV / LAN / portable drive) with merge semantics (per-account timestamps + deletion tombstones) — still no first-party servers.
-- **Hardening extras**: configurable Argon2id parameters (preset levels) and login-attempt throttling (progressive backoff).
-- **Importer plugin API (WASM)** for community formats — sandboxed, with a documented ABI.
-- Optional **password-strength meter** that runs entirely offline (local wordlist).
+- **SHA-256 release checksums** — every release asset ships with a `<file>.sha256` sidecar in `sha256sum -c` format.
+- **Portable mode** — `--portable` keeps vault + settings in `authio-data/` next to the executable.
+- **More importers** — 2FAS, Raivo, andOTP, Bitwarden TOTP CSV, and Steam maFile (each an isolated, individually tested module).
+- **System tray with minimize-to-tray** — Settings toggle; tray menu: show / lock / quit; the close button hides to tray.
+- **Single instance** — a second launch focuses the existing window (restoring it from the tray) and exits.
+- **Specialized issuers: Steam / Battle.net** — Steam = 5-character custom-alphabet rendering + maFile import, auto-detected from `issuer=Steam` URIs; Battle.net needs nothing special — standard TOTP SHA-1 / 8 digits / 30 s, supported from day one.
 
 ---
 

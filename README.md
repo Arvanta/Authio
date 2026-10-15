@@ -93,15 +93,11 @@ Authio/
 │       ├── commands.rs   # Tauri IPC surface (secrets never leave here)
 │       └── ...
 ├── docs/
-│   ├── SPEC.md           # feature specification (MVP / v1.x / v2+)
+│   ├── SPEC.md           # feature specification
 │   ├── BACKUP-FORMAT.md  # documented backup format
 │   └── SECURITY.md       # security model & hardening notes
 └── .github/workflows/    # CI: tests + Windows NSIS + portable zip → Releases
 ```
-
-## Roadmap
-
-See [`docs/SPEC.md`](docs/SPEC.md) — next up: Windows Hello unlock, webcam QR scan, Farsi/RTL localization, local-first sync.
 
 ## License
 
