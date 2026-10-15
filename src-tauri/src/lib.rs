@@ -26,7 +26,7 @@ pub fn run() {
             let state = Arc::new(AppState::new(dir));
             app.manage(state.clone());
 
-            let win = app.get_window("main").ok_or("main window missing")?;
+            let win = app.get_webview_window("main").ok_or("main window missing")?;
 
             // Restore persisted window geometry before revealing the window.
             if let Ok(settings) = state.settings.lock() {
