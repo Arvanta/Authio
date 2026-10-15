@@ -95,7 +95,9 @@ pub fn open_url(target: &str) -> Result<(), String> {
         other => return Err(format!("unknown link target \"{other}\"")),
     };
     #[cfg(target_os = "windows")]
-    let spawned = std::process::Command::new("cmd").args(["/C", "start", "", url]).spawn();
+    // explorer.exe opens the URL in the default browser without flashing a
+    // console window (unlike `cmd /C start`).
+    let spawned = std::process::Command::new("explorer").arg(url).spawn();
     #[cfg(target_os = "macos")]
     let spawned = std::process::Command::new("open").arg(url).spawn();
     #[cfg(all(unix, not(target_os = "macos")))]

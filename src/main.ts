@@ -800,7 +800,11 @@ async function pollCodes() {
 }
 
 async function refresh() {
+  const known = new Set(accounts.map((a) => a.id));
   accounts = await api.listAccounts();
+  // "Hide codes until revealed" must stay consistent: accounts added after the
+  // toggle start hidden; accounts the user already revealed stay revealed.
+  if (settings.hide_codes) for (const a of accounts) if (!known.has(a.id)) hidden.add(a.id);
   renderList();
   void pollCodes();
 }

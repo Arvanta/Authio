@@ -15,7 +15,10 @@
       "password": "主密码",
       "keychain": "Windows 登录（系统钥匙串）",
       "none": "无安全保护"
-    }
+    },
+    "mode.password.desc": "设置一个高强度密码。它在本地加密保险库，并且永远不会离开这台设备。",
+    "mode.keychain.desc": "随你的 Windows 会话解锁。密钥由 Windows 保管，而不是保存在文件里。",
+    "mode.none.desc": "没有密码 — 任何打开本应用的人都能读取所有密钥。不建议。"
   },
   "lock": {
     "title": "欢迎回来",
@@ -165,7 +168,7 @@
     "sort_alpha": "按字母排序（禁用拖放排序）",
     "hide_codes": "在显示前隐藏验证码",
     "autolock": "无操作后自动锁定",
-    "lock_minimize": "窗口最小化时锁定",
+    "lock_minimize": "窗口最小化或隐藏到托盘时锁定",
     "tray": "在系统托盘运行（点关闭会最小化到托盘而不是退出）",
     "security": "安全",
     "data": "数据",
@@ -189,8 +192,8 @@
   },
   "about": {
     "title": "关于",
-    "github": "GitHub — 源码、问题与发布",
-    "donate": "捐赠 — 支持开发"
+    "github": "Github",
+    "donate": "捐赠"
   },
   "chg": {
     "title": "更改解锁方式",

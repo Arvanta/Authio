@@ -15,7 +15,10 @@
       "password": "Contraseña maestra",
       "keychain": "Inicio de sesión de Windows (llavero del SO)",
       "none": "Sin seguridad"
-    }
+    },
+    "mode.password.desc": "Eliges una contraseña fuerte. Cifra la bóveda localmente y nunca sale de este dispositivo.",
+    "mode.keychain.desc": "Se desbloquea con tu sesión de Windows. La clave la guarda Windows, no un archivo.",
+    "mode.none.desc": "Sin contraseña — cualquiera que abra esta app podrá leer todos los secretos. No recomendado."
   },
   "lock": {
     "title": "Bienvenido de nuevo",
@@ -165,7 +168,7 @@
     "sort_alpha": "Ordenar alfabéticamente (desactiva arrastrar y soltar)",
     "hide_codes": "Ocultar códigos hasta mostrarlos",
     "autolock": "Bloqueo automático por inactividad",
-    "lock_minimize": "Bloquear al minimizar la ventana",
+    "lock_minimize": "Bloquear al minimizar la ventana u ocultarla en la bandeja",
     "tray": "Ejecutar en la bandeja del sistema (cerrar minimiza en vez de salir)",
     "security": "Seguridad",
     "data": "Datos",
@@ -189,8 +192,8 @@
   },
   "about": {
     "title": "Acerca de",
-    "github": "GitHub — código, incidencias y versiones",
-    "donate": "Donar — apoya el desarrollo"
+    "github": "Github",
+    "donate": "Donar"
   },
   "chg": {
     "title": "Cambiar método de desbloqueo",

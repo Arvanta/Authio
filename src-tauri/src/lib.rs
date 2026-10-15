@@ -20,6 +20,11 @@ use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize, WindowEvent};
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Single instance must be registered FIRST: a second launch focuses the
+        // existing window (unhiding it from the tray) and exits immediately.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            show_main_window(app);
+        }))
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Portable mode: `--portable` keeps vault + settings next to the exe
@@ -144,10 +149,13 @@ pub fn run() {
                         .map(|t| t.elapsed().as_secs())
                         .unwrap_or(0);
                     let idle_expired = auto_min > 0 && idle_secs >= auto_min * 60;
+                    // "Lock when minimized" also covers a window hidden to the system
+                    // tray: `is_minimized()` is false for a hidden window, but from the
+                    // user's point of view the app left the screen in both cases.
                     let minimized = lock_min
                         && handle
                             .get_webview_window("main")
-                            .map(|w| w.is_minimized().unwrap_or(false))
+                            .map(|w| w.is_minimized().unwrap_or(false) || !w.is_visible().unwrap_or(true))
                             .unwrap_or(false);
                     if idle_expired || minimized {
                         state_t.do_lock();

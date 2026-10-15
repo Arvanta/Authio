@@ -15,7 +15,10 @@
       "password": "Mot de passe maître",
       "keychain": "Session Windows (trousseau OS)",
       "none": "Aucune sécurité"
-    }
+    },
+    "mode.password.desc": "Vous choisissez un mot de passe fort. Il chiffre le coffre localement et ne quitte jamais cet appareil.",
+    "mode.keychain.desc": "Déverrouille avec votre session Windows. La clé est conservée par Windows, pas dans un fichier.",
+    "mode.none.desc": "Aucun mot de passe — toute personne ouvrant cette app peut lire tous les secrets. Déconseillé."
   },
   "lock": {
     "title": "Bon retour",
@@ -165,7 +168,7 @@
     "sort_alpha": "Tri alphabétique (désactive le glisser-déposer)",
     "hide_codes": "Masquer les codes jusqu'à affichage",
     "autolock": "Verrouillage auto après inactivité",
-    "lock_minimize": "Verrouiller à la réduction de la fenêtre",
+    "lock_minimize": "Verrouiller à la réduction ou au masquage dans la zone de notification",
     "tray": "Exécuter dans la zone de notification (la fermeture minimise au lieu de quitter)",
     "security": "Sécurité",
     "data": "Données",
@@ -189,8 +192,8 @@
   },
   "about": {
     "title": "À propos",
-    "github": "GitHub — code source, tickets & versions",
-    "donate": "Faire un don — soutenir le projet"
+    "github": "Github",
+    "donate": "Don"
   },
   "chg": {
     "title": "Changer la méthode de déverrouillage",

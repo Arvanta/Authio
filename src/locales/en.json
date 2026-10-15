@@ -15,7 +15,10 @@
       "password": "Master password",
       "keychain": "Windows sign-in (OS keychain)",
       "none": "No security"
-    }
+    },
+    "mode.password.desc": "You choose a strong password. It encrypts the vault locally and never leaves this device.",
+    "mode.keychain.desc": "Unlocks with your Windows session. The key is stored by Windows, not in a file.",
+    "mode.none.desc": "No password — anyone who opens this app can read every secret. Not recommended."
   },
   "lock": {
     "title": "Welcome back",
@@ -165,7 +168,7 @@
     "sort_alpha": "Sort alphabetically (disables drag & drop)",
     "hide_codes": "Hide codes until revealed",
     "autolock": "Auto-lock after inactivity",
-    "lock_minimize": "Lock when window is minimized",
+    "lock_minimize": "Lock when window is minimized or hidden to tray",
     "tray": "Run in system tray (the close button minimizes to tray instead of quitting)",
     "security": "Security",
     "data": "Data",
@@ -189,8 +192,8 @@
   },
   "about": {
     "title": "About",
-    "github": "GitHub — source, issues & releases",
-    "donate": "Donate — support development"
+    "github": "Github",
+    "donate": "Donate"
   },
   "chg": {
     "title": "Change unlock method",

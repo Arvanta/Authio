@@ -15,7 +15,10 @@
       "password": "마스터 비밀번호",
       "keychain": "Windows 로그인 (OS 키체인)",
       "none": "보안 없음"
-    }
+    },
+    "mode.password.desc": "강력한 비밀번호를 직접 설정합니다. 금고를 로컬에서 암호화하며 이 기기를 벗어나지 않습니다.",
+    "mode.keychain.desc": "Windows 세션으로 잠금 해제합니다. 키는 파일이 아닌 Windows가 보관합니다.",
+    "mode.none.desc": "비밀번호 없음 — 이 앱을 여는 사람은 누구나 모든 비밀 키를 읽을 수 있습니다. 권장하지 않습니다."
   },
   "lock": {
     "title": "다시 오신 것을 환영합니다",
@@ -165,7 +168,7 @@
     "sort_alpha": "알파벳순으로 정렬 (끌어 놓기 비활성화)",
     "hide_codes": "표시할 때까지 코드 숨기기",
     "autolock": "비활동 시 자동 잠금",
-    "lock_minimize": "창을 최소화하면 잠금",
+    "lock_minimize": "창을 최소화하거나 트레이로 숨기면 잠금",
     "tray": "시스템 트레이에서 실행 (닫기 시 종료 대신 트레이로 최소화)",
     "security": "보안",
     "data": "데이터",
@@ -189,8 +192,8 @@
   },
   "about": {
     "title": "정보",
-    "github": "GitHub — 소스, 이슈, 릴리스",
-    "donate": "후원하기 — 개발 지원"
+    "github": "Github",
+    "donate": "후원"
   },
   "chg": {
     "title": "잠금 해제 방법 변경",

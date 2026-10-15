@@ -15,7 +15,10 @@
       "password": "Master-Passwort",
       "keychain": "Windows-Anmeldung (OS-Schlüsselbund)",
       "none": "Keine Sicherheit"
-    }
+    },
+    "mode.password.desc": "Ein starkes Passwort deiner Wahl. Es verschlüsselt den Tresor lokal und verlässt dieses Gerät nie.",
+    "mode.keychain.desc": "Entsperrt mit deiner Windows-Sitzung. Der Schlüssel wird von Windows verwahrt, nicht in einer Datei.",
+    "mode.none.desc": "Kein Passwort — jeder, der diese App öffnet, kann alle Geheimnisse lesen. Nicht empfohlen."
   },
   "lock": {
     "title": "Willkommen zurück",
@@ -165,7 +168,7 @@
     "sort_alpha": "Alphabetisch sortieren (deaktiviert Drag & Drop)",
     "hide_codes": "Codes bis zum Anzeigen verbergen",
     "autolock": "Automatische Sperre bei Inaktivität",
-    "lock_minimize": "Sperren, wenn das Fenster minimiert wird",
+    "lock_minimize": "Sperren, wenn das Fenster minimiert oder in die Tray versteckt wird",
     "tray": "Im System-Tray ausführen (Schließen minimiert in die Tray statt zu beenden)",
     "security": "Sicherheit",
     "data": "Daten",
@@ -189,8 +192,8 @@
   },
   "about": {
     "title": "Über",
-    "github": "GitHub — Quellcode, Issues & Releases",
-    "donate": "Spenden — Entwicklung unterstützen"
+    "github": "Github",
+    "donate": "Spenden"
   },
   "chg": {
     "title": "Entsperrmethode ändern",

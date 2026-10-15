@@ -64,7 +64,7 @@ This document is the single source of truth for Authio's scope. Features are org
   - **No security** — key embedded in the vault file (obfuscation only, clearly labelled and warned about in the UI).
 - **Random salt & nonce per encryption**; header records version + KDF + cipher parameters for forward migration.
 - **Atomic persistence**: write-temp-then-rename, plus an automatic `.bak` of the last good vault.
-- **Auto-lock**: after N minutes of inactivity (default 5; 0 = off) and on window minimize — key and decrypted accounts are wiped from memory (`zeroize`). Auto-lock is skipped entirely in "no security" mode.
+- **Auto-lock**: after N minutes of inactivity (default 5; 0 = off) and when the window leaves the screen — minimized **or hidden to the system tray** (same toggle; a hidden window is not "minimized" at the OS level, but the lock semantics are identical for the user). Key and decrypted accounts are wiped from memory (`zeroize`). Auto-lock is skipped entirely in "no security" mode.
 - **Auto-unlock at startup** (once) for keychain / no-security vaults; manual `Ctrl+L` locking still available.
 - **Screen-capture protection**: window content protection (`set_content_protected`) on Windows so screenshots/screen-share show a black surface.
 - **Re-authentication required** to reveal a stored secret or to perform any export containing secrets.
@@ -130,6 +130,7 @@ This document is the single source of truth for Authio's scope. Features are org
 - ~~Portable mode: `--portable`~~ ✅ (vault + settings live in `authio-data/` next to the executable)
 - ~~More importers: 2FAS, Raivo, andOTP, Bitwarden/TOTP CSV~~ ✅ (+ Steam maFile)
 - ~~System tray with minimize-to-tray~~ ✅ (Settings toggle; tray menu: show / lock / quit; the close button hides to tray)
+- ~~Single instance~~ ✅ (a second launch focuses the existing window — restoring it from the tray — and exits)
 - ~~Specialized issuers: Steam / Battle.net~~ ✅ (Steam = 5-character custom-alphabet rendering + maFile import, auto-detected from `issuer=Steam` URIs; Battle.net needs nothing special — standard TOTP SHA-1 / 8 digits / 30 s, supported from day one)
 - **Import camera scan (webcam QR)** — optional, behind a permission prompt; reuses the existing `rqrr` decode pipeline.
 - **Windows Hello unlock** (where supported by the OS credential APIs) — a fourth unlock method alongside password / keychain / none.

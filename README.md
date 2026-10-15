@@ -7,6 +7,10 @@
   <b>Rust</b> + <b>Tauri</b> + <b>TypeScript</b> — fully offline, no accounts, no telemetry.
 </p>
 
+<p align="center">
+  <img src="docs/screenshot-main.png" alt="Authio main window — grouped accounts, dark theme" width="430" />
+</p>
+
 ---
 
 ## Features

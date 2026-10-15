@@ -859,7 +859,7 @@ body[data-density="comfortable"] .code {
 
 /* ---------- Topbar: group filter select + state icons ---------- */
 .gsel {
-  max-width: 132px;
+  max-width: 102px;
   padding: 5px 8px;
   font-size: 12px;
   border-radius: 8px;
@@ -989,6 +989,15 @@ body[data-density="comfortable"] .timercol .ring {
   grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
   gap: 8px;
   align-content: start;
+}
+.card.tile {
+  /* Fixed card height: cards never squash when space runs out — the list
+     scrolls instead. Keep height on the card (not grid-auto-rows) so
+     group-label tracks stay content-sized. */
+  height: 118px;
+}
+body[data-density="comfortable"] .card.tile {
+  height: 132px;
 }
 .list.tiles .section-label {
   grid-column: 1 / -1;

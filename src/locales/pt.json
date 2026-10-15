@@ -15,7 +15,10 @@
       "password": "Palavra-passe mestra",
       "keychain": "Início de sessão do Windows (cofre do SO)",
       "none": "Sem segurança"
-    }
+    },
+    "mode.password.desc": "Escolhe uma palavra-passe forte. Cifra o cofre localmente e nunca sai deste dispositivo.",
+    "mode.keychain.desc": "Desbloqueia com a sua sessão do Windows. A chave é guardada pelo Windows, não num ficheiro.",
+    "mode.none.desc": "Sem palavra-passe — quem abrir esta app pode ler todos os segredos. Não recomendado."
   },
   "lock": {
     "title": "Bem-vindo de volta",
@@ -165,7 +168,7 @@
     "sort_alpha": "Ordenar alfabeticamente (desativa arrastar e largar)",
     "hide_codes": "Ocultar códigos até os mostrar",
     "autolock": "Bloqueio automático por inatividade",
-    "lock_minimize": "Bloquear ao minimizar a janela",
+    "lock_minimize": "Bloquear ao minimizar a janela ou ocultar na bandeja",
     "tray": "Executar na bandeja do sistema (fechar minimiza em vez de sair)",
     "security": "Segurança",
     "data": "Dados",
@@ -189,8 +192,8 @@
   },
   "about": {
     "title": "Sobre",
-    "github": "GitHub — código, problemas e versões",
-    "donate": "Doar — apoiar o desenvolvimento"
+    "github": "Github",
+    "donate": "Doar"
   },
   "chg": {
     "title": "Alterar método de desbloqueio",
