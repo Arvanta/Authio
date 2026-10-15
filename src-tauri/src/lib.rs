@@ -76,7 +76,7 @@ pub fn run() {
                     let idle_expired = auto_min > 0 && idle_secs >= auto_min * 60;
                     let minimized = lock_min
                         && handle
-                            .get_window("main")
+                            .get_webview_window("main")
                             .map(|w| w.is_minimized().unwrap_or(false))
                             .unwrap_or(false);
                     if idle_expired || minimized {
@@ -117,7 +117,7 @@ pub fn run() {
         .expect("error while running Authio");
 }
 
-fn save_window_geo(state: &Arc<AppState>, win: &tauri::Window, force: bool) {
+fn save_window_geo(state: &Arc<AppState>, win: &tauri::WebviewWindow, force: bool) {
     {
         let Ok(mut ts) = state.last_geo_save.lock() else {
             return;
