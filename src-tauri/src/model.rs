@@ -21,6 +21,19 @@ impl Default for Algorithm {
 }
 
 impl Algorithm {
+    /// Strict variant for imported / typed data: a MISSING (or blank) value means the
+    /// standard default (SHA-1), but a value we do not support (MD5, SHA3-256, a typo …)
+    /// is an error — silently falling back to SHA-1 would store an account that can
+    /// never produce a valid code.
+    pub fn from_opt(s: Option<&str>) -> Result<Self, String> {
+        match s.map(str::trim) {
+            None | Some("") => Ok(Self::default()),
+            Some(v) => Self::parse(v).ok_or_else(|| {
+                let shown: String = v.chars().take(24).collect();
+                format!("unsupported algorithm '{shown}' (supported: SHA1, SHA256, SHA512)")
+            }),
+        }
+    }
     pub fn parse(s: &str) -> Option<Self> {
         match s.trim().to_ascii_uppercase().replace('-', "").as_str() {
             "SHA1" => Some(Self::SHA1),
@@ -216,8 +229,11 @@ pub struct Settings {
     pub view_mode: String, // "rows" | "tiles"
     #[serde(default = "default_true")]
     pub show_timer_number: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub grouped_view: bool,
+    /// Rows view only: show the round letter avatar at the start of each item.
+    #[serde(default = "default_true")]
+    pub show_avatars: bool,
     #[serde(default = "default_true")]
     pub tray: bool,
     #[serde(default = "default_lang")]
@@ -261,7 +277,8 @@ impl Default for Settings {
             lock_on_minimize: true,
             view_mode: default_view_mode(),
             show_timer_number: true,
-            grouped_view: false,
+            grouped_view: true,
+            show_avatars: true,
             tray: true,
             lang: default_lang(),
             window: None,
@@ -282,4 +299,20 @@ pub fn now_unix() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_settings_files_get_new_defaults() {
+        // A settings.json from before these fields existed must still load.
+        let s: Settings = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
+        assert_eq!(s.theme, "dark");
+        assert!(s.grouped_view, "grouped view is on by default");
+        assert!(s.show_avatars, "row avatars are on by default");
+        let d = Settings::default();
+        assert!(d.grouped_view && d.show_avatars);
+    }
 }

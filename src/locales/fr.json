@@ -25,6 +25,7 @@
     "password": "Mot de passe maître",
     "unlock": "Déverrouiller",
     "auto": "Verrouillé automatiquement pour votre sécurité.",
+    "recovered": "Le fichier de votre coffre était endommagé ou une sauvegarde précédente a été interrompue ; il a été restauré depuis la dernière copie de secours. Vérifiez vos comptes.",
     "subtitle": {
       "password": "Saisissez votre mot de passe maître pour déverrouiller vos codes.",
       "keychain": "Votre coffre se déverrouille avec votre session Windows.",
@@ -83,8 +84,8 @@
   "add": {
     "title": "Ajouter un compte",
     "qr": {
-      "choose": "Choisir une image…",
-      "hint": "Sélectionnez une capture d'écran ou une photo d'un code QR (PNG ou JPEG). Les QR d'export de Google Authenticator sont pris en charge."
+      "choose": "Choisir des images…",
+      "hint": "Sélectionnez une ou plusieurs captures d'écran ou photos de codes QR (PNG ou JPEG). Une image peut contenir plusieurs codes QR. Les QR d'export de Google Authenticator sont pris en charge."
     },
     "uri": {
       "label": "Coller un lien otpauth://",
@@ -135,6 +136,7 @@
       "title": "Vérifier l'import",
       "format": "Format détecté",
       "skipped": "{n} entrée(s) mal formée(s) ignorée(s)",
+      "batch": "{files} image(s) analysée(s) · {failed} sans code QR exploitable · {merged} doublon(s) fusionné(s)",
       "dupe": "doublon",
       "none": "Aucun compte trouvé.",
       "submit": "Importer la sélection ({n})",
@@ -174,6 +176,7 @@
     "data": "Données",
     "unlock_method": "Méthode de déverrouillage",
     "timer_number": "Afficher le compte à rebours dans l'anneau",
+    "show_avatars": "Afficher les icônes au début des éléments (vue en lignes)",
     "change": "Modifier…",
     "about": "Authio {v} — libre et open source (MIT). Entièrement hors ligne : pas d'internet, pas de télémétrie, pas de comptes. Vos secrets ne quittent jamais cet appareil.",
     "saved": "Paramètres enregistrés",

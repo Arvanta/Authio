@@ -25,6 +25,7 @@
     "password": "Master-Passwort",
     "unlock": "Entsperren",
     "auto": "Zu deiner Sicherheit automatisch gesperrt.",
+    "recovered": "Ihre Tresordatei war beschädigt oder ein früheres Speichern wurde unterbrochen. Sie wurde aus der letzten Sicherungskopie wiederhergestellt. Bitte prüfen Sie Ihre Konten.",
     "subtitle": {
       "password": "Gib dein Master-Passwort ein, um deine Codes zu entsperren.",
       "keychain": "Dein Tresor wird mit deiner Windows-Sitzung entsperrt.",
@@ -83,8 +84,8 @@
   "add": {
     "title": "Konto hinzufügen",
     "qr": {
-      "choose": "Bild auswählen…",
-      "hint": "Wähle einen Screenshot oder ein Foto eines QR-Codes (PNG oder JPEG). QR-Codes aus Google Authenticator werden unterstützt."
+      "choose": "Bilder auswählen…",
+      "hint": "Wähle einen oder mehrere Screenshots oder Fotos von QR-Codes (PNG oder JPEG). Ein Bild darf mehrere QR-Codes enthalten. Export-QR-Codes von Google Authenticator werden unterstützt."
     },
     "uri": {
       "label": "otpauth://-URI einfügen",
@@ -135,6 +136,7 @@
       "title": "Import prüfen",
       "format": "Erkanntes Format",
       "skipped": "{n} fehlerhafte(r) Eintrag/Einträge übersprungen",
+      "batch": "{files} Bild(er) gescannt · {failed} ohne verwendbaren QR-Code · {merged} Duplikat(e) zusammengeführt",
       "dupe": "Duplikat",
       "none": "Keine Konten gefunden.",
       "submit": "Auswahl importieren ({n})",
@@ -174,6 +176,7 @@
     "data": "Daten",
     "unlock_method": "Entsperrmethode",
     "timer_number": "Countdown-Zahl im Zeitring anzeigen",
+    "show_avatars": "Symbole am Anfang der Einträge anzeigen (Zeilenansicht)",
     "change": "Ändern…",
     "about": "Authio {v} — frei und quelloffen (MIT). Vollständig offline: kein Internet, keine Telemetrie, keine Konten. Deine Geheimnisse verlassen dieses Gerät nie.",
     "saved": "Einstellungen gespeichert",

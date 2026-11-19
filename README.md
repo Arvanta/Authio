@@ -18,7 +18,7 @@
 ### Core
 - **TOTP (RFC 6238)** — SHA-1 / SHA-256 / SHA-512, 6/8 digits, 15/30/60 s and custom periods, verified against the official RFC test vectors in CI.
 - **HOTP (RFC 4226)** counter-based codes, one tap per code.
-- **Add accounts** by QR image (PNG/JPEG), `otpauth://` link, or manual Base32 secret — with validation before anything is stored.
+- **Add accounts** by QR image(s) (PNG/JPEG — several images, or several QR codes per image, at once), `otpauth://` link, or manual Base32 secret — with validation before anything is stored.
 - **Live list** with one-tap copy, countdown ring, per-second refresh, and codes hidden until you reveal them.
 - **Manage**: edit, delete (with confirmation), pin, drag-and-drop reorder, alphabetical sort, instant search.
 
@@ -96,7 +96,8 @@ Authio/
 │   ├── SPEC.md           # feature specification
 │   ├── BACKUP-FORMAT.md  # documented backup format
 │   └── SECURITY.md       # security model & hardening notes
-└── .github/workflows/    # CI: tests + Windows NSIS + portable zip → Releases
+├── .github/workflows/    # CI: tests + Windows NSIS + portable zip → Releases
+└── HANDOFF.md            # project handoff — architecture, release flow, lessons
 ```
 
 ## License

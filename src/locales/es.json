@@ -25,6 +25,7 @@
     "password": "Contraseña maestra",
     "unlock": "Desbloquear",
     "auto": "Bloqueado automáticamente por tu seguridad.",
+    "recovered": "El archivo de tu bóveda estaba dañado o un guardado anterior se interrumpió, así que se restauró desde la última copia de seguridad. Revisa tus cuentas.",
     "subtitle": {
       "password": "Introduce tu contraseña maestra para desbloquear tus códigos.",
       "keychain": "Tu bóveda se desbloquea con tu sesión de Windows.",
@@ -83,8 +84,8 @@
   "add": {
     "title": "Añadir cuenta",
     "qr": {
-      "choose": "Elegir imagen…",
-      "hint": "Selecciona una captura o foto de un código QR (PNG o JPEG). Se admiten los QR de exportación de Google Authenticator."
+      "choose": "Elegir imágenes…",
+      "hint": "Selecciona una o varias capturas o fotos de códigos QR (PNG o JPEG). Una imagen puede contener varios códigos QR. Se admiten los QR de exportación de Google Authenticator."
     },
     "uri": {
       "label": "Pega un enlace otpauth://",
@@ -135,6 +136,7 @@
       "title": "Revisar importación",
       "format": "Formato detectado",
       "skipped": "{n} entrada(s) mal formada(s) omitida(s)",
+      "batch": "{files} imagen(es) analizadas · {failed} sin un QR utilizable · {merged} duplicado(s) combinado(s)",
       "dupe": "duplicado",
       "none": "No se encontraron cuentas.",
       "submit": "Importar selección ({n})",
@@ -174,6 +176,7 @@
     "data": "Datos",
     "unlock_method": "Método de desbloqueo",
     "timer_number": "Mostrar la cuenta atrás dentro del anillo",
+    "show_avatars": "Mostrar iconos al inicio de los elementos (vista de filas)",
     "change": "Cambiar…",
     "about": "Authio {v} — libre y de código abierto (MIT). Totalmente sin conexión: sin internet, sin telemetría, sin cuentas. Tus secretos nunca salen de este dispositivo.",
     "saved": "Ajustes guardados",

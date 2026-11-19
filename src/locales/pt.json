@@ -25,6 +25,7 @@
     "password": "Palavra-passe mestra",
     "unlock": "Desbloquear",
     "auto": "Bloqueado automaticamente para sua segurança.",
+    "recovered": "O ficheiro do seu cofre estava danificado ou uma gravação anterior foi interrompida, por isso foi restaurado a partir da cópia de segurança mais recente. Verifique as suas contas.",
     "subtitle": {
       "password": "Introduza a sua palavra-passe mestra para desbloquear os códigos.",
       "keychain": "O seu cofre desbloqueia com a sua sessão do Windows.",
@@ -83,8 +84,8 @@
   "add": {
     "title": "Adicionar conta",
     "qr": {
-      "choose": "Escolher imagem…",
-      "hint": "Selecione uma captura de ecrã ou foto de um código QR (PNG ou JPEG). Os QR de exportação do Google Authenticator são suportados."
+      "choose": "Escolher imagens…",
+      "hint": "Selecione uma ou mais capturas de ecrã ou fotos de códigos QR (PNG ou JPEG). Uma imagem pode conter vários códigos QR. Os QR de exportação do Google Authenticator são suportados."
     },
     "uri": {
       "label": "Colar uma ligação otpauth://",
@@ -135,6 +136,7 @@
       "title": "Rever importação",
       "format": "Formato detetado",
       "skipped": "{n} entrada(s) mal formada(s) ignorada(s)",
+      "batch": "{files} imagem(ns) analisada(s) · {failed} sem QR utilizável · {merged} duplicado(s) unido(s)",
       "dupe": "duplicado",
       "none": "Nenhuma conta encontrada.",
       "submit": "Importar seleção ({n})",
@@ -174,6 +176,7 @@
     "data": "Dados",
     "unlock_method": "Método de desbloqueio",
     "timer_number": "Mostrar a contagem decrescente dentro do anel",
+    "show_avatars": "Mostrar ícones no início dos itens (vista em linhas)",
     "change": "Alterar…",
     "about": "Authio {v} — livre e de código aberto (MIT). Totalmente offline: sem internet, sem telemetria, sem contas. Os seus segredos nunca saem deste dispositivo.",
     "saved": "Definições guardadas",

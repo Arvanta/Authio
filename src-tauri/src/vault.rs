@@ -7,6 +7,7 @@
 use crate::crypto;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use zeroize::Zeroizing;
 
 pub const FORMAT_VERSION: u32 = 1;
 
@@ -63,7 +64,7 @@ pub fn read_envelope(path: &Path) -> Result<Envelope, String> {
     Ok(env)
 }
 
-pub fn decrypt_envelope(env: &Envelope, key: &[u8; crypto::KEY_LEN]) -> Result<Vec<u8>, String> {
+pub fn decrypt_envelope(env: &Envelope, key: &[u8; crypto::KEY_LEN]) -> Result<Zeroizing<Vec<u8>>, String> {
     use base64::{engine::general_purpose::STANDARD, Engine as _};
     if env.cipher.name != "aes-256-gcm" {
         return Err(format!("unsupported cipher {}", env.cipher.name));
@@ -94,23 +95,105 @@ pub fn write_envelope(
         data: STANDARD.encode(ct),
     };
     let json = serde_json::to_string_pretty(&env).map_err(|e| e.to_string())?;
-    atomic_write(path, json.as_bytes())
+    if kind == "vault" {
+        write_vault_file(path, json.as_bytes())
+    } else {
+        // Backups go to a user-chosen location: no .bak / .tmp clutter beside it.
+        write_user_file(path, json.as_bytes())
+    }
 }
 
-/// Write via temp file + rename; keep previous contents as `.bak`.
-pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
+fn is_valid_envelope(bytes: &[u8]) -> bool {
+    serde_json::from_slice::<Envelope>(bytes).map(|e| e.app == "authio").unwrap_or(false)
+}
+
+/// Write `bytes` to `tmp` and flush them to disk (fsync) before returning.
+fn write_synced(tmp: &Path, bytes: &[u8]) -> Result<(), String> {
+    use std::io::Write;
+    let mut f = std::fs::File::create(tmp).map_err(|e| format!("write failed: {e}"))?;
+    f.write_all(bytes).map_err(|e| format!("write failed: {e}"))?;
+    f.sync_all().map_err(|e| format!("write failed (flush): {e}"))?;
+    Ok(())
+}
+
+/// Replace `path` with `tmp`. `std::fs::rename` overwrites an existing destination
+/// on Windows (MoveFileEx + REPLACE_EXISTING), so the old file is NEVER deleted
+/// first — there is no instant at which neither copy exists.
+fn replace_file(tmp: &Path, path: &Path) -> Result<(), String> {
+    std::fs::rename(tmp, path).map_err(|e| {
+        let _ = std::fs::remove_file(tmp);
+        format!("replace failed: {e}")
+    })
+}
+
+fn generic_atomic_write(path: &Path, bytes: &[u8], keep_bak: Option<fn(&[u8]) -> bool>) -> Result<(), String> {
     let dir = path.parent().ok_or("invalid path")?;
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let tmp: PathBuf = path.with_extension("tmp");
-    std::fs::write(&tmp, bytes).map_err(|e| format!("write failed: {e}"))?;
-    if path.exists() {
-        let bak = path.with_extension("bak");
-        let _ = std::fs::copy(path, &bak);
-        // On Windows rename fails if destination exists.
-        let _ = std::fs::remove_file(path);
+    write_synced(&tmp, bytes)?;
+    if let Some(is_good) = keep_bak {
+        // Only refresh the .bak from a file that is itself intact, so a damaged
+        // vault can never overwrite the last good backup.
+        if let Ok(old) = std::fs::read(path) {
+            if is_good(&old) {
+                let _ = std::fs::write(path.with_extension("bak"), &old);
+            }
+        }
     }
-    std::fs::rename(&tmp, path).map_err(|e| format!("replace failed: {e}"))?;
-    Ok(())
+    replace_file(&tmp, path)
+}
+
+/// Vault write: fsync'd temp file → replace; `.bak` keeps the last good vault.
+pub fn write_vault_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    generic_atomic_write(path, bytes, Some(is_valid_envelope))
+}
+
+/// Small app files (settings): atomic replace, `.bak` of any non-empty previous copy.
+pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    generic_atomic_write(path, bytes, Some(|b: &[u8]| !b.is_empty()))
+}
+
+/// File the user picked (exports): atomic replace with no `.bak`, and a temp file
+/// named after the full file name so an unrelated sibling can never be clobbered.
+pub fn write_user_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let dir = path.parent().ok_or("invalid path")?;
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let name = path.file_name().ok_or("invalid path")?.to_string_lossy().into_owned();
+    let tmp = path.with_file_name(format!("{name}.authio-tmp"));
+    write_synced(&tmp, bytes)?;
+    replace_file(&tmp, path)
+}
+
+/// Drop the `.bak` (e.g. after the unlock method changed: it is still protected
+/// by the OLD method — for "no security" mode that means readable by anyone).
+pub fn discard_backup(path: &Path) {
+    let _ = std::fs::remove_file(path.with_extension("bak"));
+}
+
+/// Startup self-heal. If `vault.json` is missing or damaged but an intact
+/// `vault.tmp` (newest, interrupted write) or `vault.bak` exists, restore it.
+/// Returns the name of the file restored from. A damaged vault is kept as
+/// `vault.corrupt` for manual forensics rather than deleted.
+pub fn recover_vault(path: &Path) -> Option<&'static str> {
+    if let Ok(cur) = std::fs::read(path) {
+        if is_valid_envelope(&cur) {
+            return None;
+        }
+    }
+    for (ext, label) in [("tmp", "tmp"), ("bak", "bak")] {
+        let cand = path.with_extension(ext);
+        let Ok(bytes) = std::fs::read(&cand) else { continue };
+        if !is_valid_envelope(&bytes) {
+            continue;
+        }
+        if path.exists() {
+            let _ = std::fs::rename(path, path.with_extension("corrupt"));
+        }
+        if std::fs::write(path, &bytes).is_ok() {
+            return Some(label);
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -126,10 +209,74 @@ mod tests {
         write_envelope(&path, "vault", &kdf, &key, b"{\"accounts\":[]}").unwrap();
         let env = read_envelope(&path).unwrap();
         assert_eq!(env.kind, "vault");
-        assert_eq!(decrypt_envelope(&env, &key).unwrap(), b"{\"accounts\":[]}");
+        assert_eq!(decrypt_envelope(&env, &key).unwrap().as_slice(), b"{\"accounts\":[]}");
         // wrong key must fail closed
         let bad = crypto::rand_bytes::<32>();
         assert!(decrypt_envelope(&env, &bad).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn tmp_dir(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("authio-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn recovers_missing_vault_from_bak() {
+        let dir = tmp_dir("rec1");
+        let path = dir.join("vault.json");
+        let key = crypto::rand_bytes::<32>();
+        write_envelope(&path, "vault", &Kdf::Keychain, &key, b"one").unwrap();
+        write_envelope(&path, "vault", &Kdf::Keychain, &key, b"two").unwrap(); // bak = "one"
+        std::fs::remove_file(&path).unwrap(); // simulate crash after delete
+        assert_eq!(recover_vault(&path), Some("bak"));
+        let env = read_envelope(&path).unwrap();
+        assert_eq!(decrypt_envelope(&env, &key).unwrap().as_slice(), b"one");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn recovers_corrupt_vault_preferring_tmp_and_keeps_evidence() {
+        let dir = tmp_dir("rec2");
+        let path = dir.join("vault.json");
+        let key = crypto::rand_bytes::<32>();
+        write_envelope(&path, "vault", &Kdf::Keychain, &key, b"old").unwrap();
+        write_envelope(&path, "vault", &Kdf::Keychain, &key, b"mid").unwrap();
+        // interrupted write: newest intact content only in .tmp, vault.json zero-length
+        std::fs::copy(&path, path.with_extension("tmp")).unwrap();
+        std::fs::write(&path, b"").unwrap();
+        assert_eq!(recover_vault(&path), Some("tmp"));
+        assert!(path.with_extension("corrupt").exists());
+        // healthy vault is left alone
+        assert_eq!(recover_vault(&path), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn damaged_vault_never_overwrites_last_good_bak() {
+        let dir = tmp_dir("bak");
+        let path = dir.join("vault.json");
+        let key = crypto::rand_bytes::<32>();
+        write_envelope(&path, "vault", &Kdf::Keychain, &key, b"good1").unwrap();
+        write_envelope(&path, "vault", &Kdf::Keychain, &key, b"good2").unwrap(); // bak = good1
+        std::fs::write(&path, b"garbage").unwrap();
+        write_envelope(&path, "vault", &Kdf::Keychain, &key, b"good3").unwrap();
+        let bak = read_envelope(&path.with_extension("bak")).unwrap();
+        assert_eq!(decrypt_envelope(&bak, &key).unwrap().as_slice(), b"good1");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn user_exports_leave_no_bak_or_tmp() {
+        let dir = tmp_dir("exp");
+        let path = dir.join("my-export.json");
+        write_user_file(&path, b"OLD").unwrap();
+        write_user_file(&path, b"NEW").unwrap();
+        let names: Vec<String> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        assert_eq!(names, vec!["my-export.json".to_string()]);
+        assert_eq!(std::fs::read(&path).unwrap(), b"NEW");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

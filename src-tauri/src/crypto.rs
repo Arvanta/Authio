@@ -26,7 +26,19 @@ pub fn rand_bytes<const N: usize>() -> [u8; N] {
     buf
 }
 
+// Sanity ceilings for KDF parameters read from UNTRUSTED files (backups, vaults).
+// Without them a crafted header (e.g. m = 4 TiB) aborts the process on allocation.
+pub const ARGON2_MAX_M_KIB: u32 = 1_048_576; // 1 GiB
+pub const ARGON2_MAX_T: u32 = 10;
+pub const ARGON2_MAX_P: u32 = 16;
+pub const SCRYPT_MAX_LOG_N: u8 = 20;
+pub const SCRYPT_MAX_R: u32 = 16;
+pub const SCRYPT_MAX_P: u32 = 16;
+
 pub fn argon2id_derive(password: &[u8], salt: &[u8], m_kib: u32, t: u32, p: u32) -> Result<Zeroizing<[u8; KEY_LEN]>, String> {
+    if m_kib > ARGON2_MAX_M_KIB || t > ARGON2_MAX_T || p > ARGON2_MAX_P {
+        return Err("key-derivation parameters in the file are outside the supported range".into());
+    }
     let params = argon2::Params::new(m_kib, t, p, Some(KEY_LEN)).map_err(|e| format!("argon2 params: {e}"))?;
     let argon = argon2::Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params);
     let mut key = Zeroizing::new([0u8; KEY_LEN]);
@@ -38,6 +50,9 @@ pub fn argon2id_derive(password: &[u8], salt: &[u8], m_kib: u32, t: u32, p: u32)
 
 /// scrypt — only used by the Aegis encrypted-vault importer.
 pub fn scrypt_derive(password: &[u8], salt: &[u8], log_n: u8, r: u32, p: u32) -> Result<Zeroizing<[u8; KEY_LEN]>, String> {
+    if log_n > SCRYPT_MAX_LOG_N || r > SCRYPT_MAX_R || p > SCRYPT_MAX_P {
+        return Err("scrypt parameters in the file are outside the supported range".into());
+    }
     let params = scrypt::Params::new(log_n, r, p).map_err(|e| format!("scrypt params: {e}"))?;
     let mut key = Zeroizing::new([0u8; KEY_LEN]);
     scrypt::scrypt(password, salt, &params, &mut *key).map_err(|e| format!("scrypt failed: {e}"))?;
@@ -56,7 +71,7 @@ pub fn encrypt(key: &[u8; KEY_LEN], plaintext: &[u8]) -> Result<(Vec<u8>, Vec<u8
 }
 
 /// AES-256-GCM decrypt of (ciphertext || tag). Fails closed on any tampering.
-pub fn decrypt(key: &[u8; KEY_LEN], nonce: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, String> {
+pub fn decrypt(key: &[u8; KEY_LEN], nonce: &[u8], ciphertext: &[u8]) -> Result<Zeroizing<Vec<u8>>, String> {
     if nonce.len() != NONCE_LEN {
         return Err("invalid nonce length".into());
     }
@@ -64,6 +79,7 @@ pub fn decrypt(key: &[u8; KEY_LEN], nonce: &[u8], ciphertext: &[u8]) -> Result<V
     let nonce_ga = Nonce::try_from(nonce).map_err(|_| "invalid nonce length")?;
     cipher
         .decrypt(&nonce_ga, ciphertext)
+        .map(Zeroizing::new)
         .map_err(|_| "decryption failed: wrong password or corrupted/tampered data".into())
 }
 
@@ -76,7 +92,7 @@ mod tests {
         let key = rand_bytes::<32>();
         let msg = b"authio secret payload";
         let (nonce, ct) = encrypt(&key, msg).unwrap();
-        assert_eq!(decrypt(&key, &nonce, &ct).unwrap(), msg);
+        assert_eq!(decrypt(&key, &nonce, &ct).unwrap().as_slice(), msg);
     }
 
     #[test]
@@ -97,6 +113,15 @@ mod tests {
         let k3 = argon2id_derive(b"pw", &salt_b, 19_456, 2, 1).unwrap();
         assert_eq!(*k1, *k2);
         assert_ne!(*k1, *k3);
+    }
+
+    #[test]
+    fn kdf_rejects_absurd_parameters() {
+        let salt = rand_bytes::<16>();
+        assert!(argon2id_derive(b"pw", &salt, u32::MAX, 3, 4).is_err());
+        assert!(argon2id_derive(b"pw", &salt, 65_536, 1000, 4).is_err());
+        assert!(scrypt_derive(b"pw", &salt, 60, 8, 1).is_err());
+        assert!(scrypt_derive(b"pw", &salt, 15, 1_000_000, 1).is_err());
     }
 
     #[test]

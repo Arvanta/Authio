@@ -89,9 +89,7 @@ pub fn parse_otpauth(uri: &str) -> Result<Draft, String> {
 
     let secret_raw = get("secret").ok_or("URI is missing the secret parameter")?;
     let secret = b32_decode(&secret_raw)?;
-    let algorithm = get("algorithm")
-        .and_then(|a| Algorithm::parse(&a))
-        .unwrap_or_default();
+    let algorithm = Algorithm::from_opt(get("algorithm").as_deref())?;
     let digits: u32 = get("digits").and_then(|d| d.parse().ok()).unwrap_or(6);
     let period: u32 = get("period").and_then(|d| d.parse().ok()).unwrap_or(30);
     let counter: u64 = get("counter").and_then(|d| d.parse().ok()).unwrap_or(0);
@@ -120,11 +118,13 @@ pub fn parse_otpauth(uri: &str) -> Result<Draft, String> {
 
 /// Serialize an account back to an otpauth URI (used for "show/reveal secret").
 pub fn to_otpauth(a: &Account) -> String {
+    // Percent-encode the UTF-8 BYTES (RFC 3986), so non-ASCII issuers/names
+    // (é, 中, علی …) survive a round trip through parse_otpauth.
     let enc = |s: &str| -> String {
-        s.chars()
-            .map(|c| match c {
-                'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => c.to_string(),
-                _ => format!("%{:02X}", c as u32),
+        s.bytes()
+            .map(|b| match b {
+                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
+                _ => format!("%{b:02X}"),
             })
             .collect()
     };
@@ -192,6 +192,30 @@ mod tests {
         assert!(parse_otpauth("otpauth://totp/x?secret=NOTB32").is_err());
         assert!(parse_otpauth("otpauth://totp/x").is_err());
         assert!(parse_otpauth("https://example.com").is_err());
+    }
+
+    #[test]
+    fn unsupported_algorithm_in_uri_is_an_error() {
+        for a in ["MD5", "SHA3-256", "foo"] {
+            let uri = format!("otpauth://totp/x?secret=JBSWY3DPEHPK3PXP&algorithm={a}");
+            let err = parse_otpauth(&uri).err().expect("must be rejected");
+            assert!(err.contains("unsupported algorithm"), "{err}");
+        }
+        assert_eq!(parse_otpauth("otpauth://totp/x?secret=JBSWY3DPEHPK3PXP").unwrap().algorithm, Algorithm::SHA1);
+        assert_eq!(parse_otpauth("otpauth://totp/x?secret=JBSWY3DPEHPK3PXP&algorithm=sha-256").unwrap().algorithm, Algorithm::SHA256);
+    }
+
+    #[test]
+    fn non_ascii_labels_roundtrip() {
+        let d = parse_otpauth("otpauth://totp/x?secret=JBSWY3DPEHPK3PXP&issuer=T").unwrap();
+        let mut a = d.into_account("i".into(), 0, 0);
+        a.issuer = "Café 中文".into();
+        a.name = "علی@x.com".into();
+        let uri = to_otpauth(&a);
+        assert!(uri.is_ascii());
+        let back = parse_otpauth(&uri).unwrap();
+        assert_eq!(back.issuer, "Café 中文");
+        assert_eq!(back.name, "علی@x.com");
     }
 
     #[test]

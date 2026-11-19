@@ -65,6 +65,8 @@ pub fn run() {
                             if let Some(s) = app.try_state::<Arc<AppState>>() {
                                 s.do_lock();
                             }
+                            // Tell the UI right away (it would otherwise only notice on its next poll).
+                            let _ = app.emit("authio://locked", ());
                         }
                         "quit" => app.exit(0),
                         _ => {}
@@ -90,7 +92,11 @@ pub fn run() {
             if let Ok(settings) = state.settings.lock() {
                 if let Some(g) = settings.window {
                     let _ = win.set_size(PhysicalSize::new(g.w.max(380), g.h.max(560)));
-                    let _ = win.set_position(PhysicalPosition::new(g.x, g.y));
+                    // Only restore the position if the window would actually be reachable:
+                    // a monitor that was unplugged since last run must not strand it off-screen.
+                    if geometry_is_visible(&win, g.x, g.y, g.w.max(380), g.h.max(560)) {
+                        let _ = win.set_position(PhysicalPosition::new(g.x, g.y));
+                    }
                 }
             }
 
@@ -186,7 +192,7 @@ pub fn run() {
             commands::export_backup,
             commands::import_text,
             commands::import_file,
-            commands::import_qr,
+            commands::import_qr_files,
             commands::import_apply,
             commands::get_settings,
             commands::set_settings,
@@ -195,6 +201,25 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Authio");
+}
+
+/// True when at least a usable part of the title-bar area lies on some monitor.
+/// If the monitor list cannot be read we assume "visible" (keep old behaviour).
+fn geometry_is_visible(win: &tauri::WebviewWindow, x: i32, y: i32, w: u32, _h: u32) -> bool {
+    let Ok(monitors) = win.available_monitors() else {
+        return true;
+    };
+    if monitors.is_empty() {
+        return true;
+    }
+    const GRAB: i32 = 120; // px of the window that must overlap a monitor horizontally
+    let right = x.saturating_add(w as i32);
+    monitors.iter().any(|m| {
+        let p = m.position();
+        let sz = m.size();
+        let (mx2, my2) = (p.x.saturating_add(sz.width as i32), p.y.saturating_add(sz.height as i32));
+        right > p.x + GRAB && x < mx2 - GRAB && y >= p.y - 8 && y < my2 - 60
+    })
 }
 
 /// Bring the main window back from minimized / hidden (tray) state.

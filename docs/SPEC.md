@@ -28,10 +28,11 @@ This document is the single source of truth for Authio's scope. It describes the
 
 ### 2. Adding accounts
 
-- **QR from image file** (PNG/JPEG) — decoded locally in Rust (`rqrr`), supporting `otpauth://` and `otpauth-migration://` (Google) payloads.
+- **QR from image file(s)** (PNG/JPEG) — select **several images at once**; every QR in every image is read (also light-on-dark codes), merged into ONE preview with duplicates (same secret) combined and unreadable images reported without aborting the batch (max 50 images, 40 MB each). Decoded locally in Rust (`rqrr`), supporting `otpauth://` and `otpauth-migration://` (Google) payloads.
 - **Manual secret entry** — Base32 input that tolerates lowercase, spaces, and padding issues; validated before saving.
 - **`otpauth://` URI paste** — full parsing of `totp`/`hotp`: issuer, account name, secret, algorithm, digits, period, counter.
 - Reads issuer / account name / code parameters from QR automatically.
+- **Unsupported algorithms are never guessed**: only SHA1/SHA256/SHA512 are supported. A missing algorithm means SHA1 (the standard default), but an unknown one (MD5, SHA3, a typo) makes a single `otpauth://` link fail with a clear error and makes that account be skipped-and-counted in every bulk import (Aegis, 2FAS, andOTP, Raivo, Authme, Authio backup, Google migration) — it is never stored as SHA1 with wrong codes.
 - **Validation before persistence**: duplicate secret detection, label conflicts, malformed secrets, and unsafe parameters are rejected with clear errors.
 - Optional **group** assignment when adding an account (with suggestions from existing groups).
 
@@ -50,7 +51,8 @@ This document is the single source of truth for Authio's scope. It describes the
 - Sort: **manual order (drag & drop)** or alphabetical (issuer → account).
 - **Instant search** over issuer and account names (search box lives in the top bar).
 - **Pin** frequent accounts to the top (via the per-card ⋮ menu).
-- **Groups**: free-form group labels per account; a top-bar filter dropdown (All / group / Ungrouped) and a toggle for grouped view with per-group sections.
+- **Groups**: free-form group labels per account; a top-bar filter dropdown (All / group / Ungrouped) and a toggle for grouped view with per-group sections (**on by default**; with no groups defined the list looks flat).
+- **Row icons**: Settings → "Show icons at the start of items" (rows view only, **on by default**) toggles the round letter avatar.
 - **Two view styles**: dense **rows** and compact **tiles**, switchable from the top bar; choice persists.
 - Per-card actions (pin, edit, reveal secret, delete) live in a **⋮ dropdown menu** (rows view).
 - Issuer + account name always rendered next to the code.
@@ -63,7 +65,7 @@ This document is the single source of truth for Authio's scope. It describes the
   - **Windows sign-in (OS keychain)** — random 256-bit key stored in the Windows Credential Manager via the `keyring` crate; vault unlocks without typing a password while the OS session is authenticated.
   - **No security** — key embedded in the vault file (obfuscation only, clearly labelled and warned about in the UI).
 - **Random salt & nonce per encryption**; header records version + KDF + cipher parameters for forward migration.
-- **Atomic persistence**: write-temp-then-rename, plus an automatic `.bak` of the last good vault.
+- **Atomic persistence**: fsync'd temp file, then replace (the old file is never deleted first), plus an automatic `.bak` of the last good vault. A missing/damaged `vault.json` is **self-healed at startup** from an intact `vault.tmp` or `vault.bak` (damaged copy kept as `vault.corrupt`). Exports never leave `.bak`/`.tmp` files beside the chosen path.
 - **Auto-lock**: after N minutes of inactivity (default 5; 0 = off) and when the window leaves the screen — minimized **or hidden to the system tray** (same toggle; a hidden window is not "minimized" at the OS level, but the lock semantics are identical for the user). Key and decrypted accounts are wiped from memory (`zeroize`). Auto-lock is skipped entirely in "no security" mode.
 - **Auto-unlock at startup** (once) for keychain / no-security vaults; manual `Ctrl+L` locking still available.
 - **Screen-capture protection**: window content protection (`set_content_protected`) on Windows so screenshots/screen-share show a black surface.
@@ -160,7 +162,7 @@ This document is the single source of truth for Authio's scope. It describes the
 - **Rust crypto deps**: `aes-gcm`, `argon2`, `scrypt`, `hmac` + `sha1`/`sha2`, `zeroize`, `keyring`, `data-encoding`, `rqrr`, `image`.
 - **OTP core hand-written** per RFC 4226/6238 with official test vectors (SHA-1/256/512) as unit tests — runs in CI on every build.
 - **Storage**: single encrypted vault file in `%APPDATA%/Authio/vault.json` (Windows), atomic writes, automatic `.bak` of last good vault.
-- **Build & release**: GitHub Actions (`tauri-action`, `windows-latest`) → NSIS installer `.exe` + portable `.zip`, published to GitHub Releases; **exactly one workflow run per release** (triggers: tags `v*` + manual dispatch only). SHA-256 checksums attached (pending).
+- **Build & release**: GitHub Actions (`tauri-action`, `windows-latest`) → NSIS installer `.exe` + portable `.zip`, published to GitHub Releases; **exactly one workflow run per release** (triggers: tags `v*` + manual dispatch only). SHA-256 checksums attached.
 - **Repo layout**: `/` (Vite app), `src-tauri/` (Rust), `docs/` (SPEC, BACKUP-FORMAT, SECURITY), `.github/workflows/build.yml`.
 
 ---

@@ -20,6 +20,17 @@ use zeroize::Zeroizing;
 
 type Cmd<T> = Result<T, String>;
 
+/// Move an IPC-supplied password into a wiped-on-drop container (best effort:
+/// the webview/IPC layer's own copies are outside our control).
+fn secret_str(s: Option<String>) -> Option<Zeroizing<String>> {
+    s.map(Zeroizing::new)
+}
+
+/// Minimum length is counted in characters, not UTF-8 bytes.
+fn min_chars(s: &str, n: usize) -> bool {
+    s.chars().count() >= n
+}
+
 // ---------------------------------------------------------------------------
 // DTOs
 
@@ -54,6 +65,8 @@ pub struct StatusDto {
     pub mode: Option<String>,
     /// Compile-time app version (Cargo.toml) — single source of truth.
     pub version: String,
+    /// "tmp" | "bak" when the vault was auto-restored at startup (UI shows a notice once).
+    pub recovered_from: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -74,6 +87,11 @@ pub struct PreviewDto {
     pub needs_password: bool,
     pub skipped: u32,
     pub entries: Vec<PreviewEntry>,
+    /// Multi-image QR import only (0 otherwise): images processed / without any readable QR /
+    /// accounts dropped because the same secret appeared more than once in the batch.
+    pub files_total: u32,
+    pub files_failed: u32,
+    pub merged_duplicates: u32,
 }
 
 #[derive(Serialize)]
@@ -150,8 +168,10 @@ struct AccountsPayloadRef<'a> {
 
 fn persist(state: &AppState) -> Cmd<()> {
     with_session(state, |s| {
-        let payload = serde_json::to_vec(&AccountsPayloadRef { accounts: &s.accounts })
-            .map_err(|e| format!("serialize failure: {e}"))?;
+        let payload = Zeroizing::new(
+            serde_json::to_vec(&AccountsPayloadRef { accounts: &s.accounts })
+                .map_err(|e| format!("serialize failure: {e}"))?,
+        );
         vault::write_envelope(&state.vault_path, "vault", &s.kdf, &s.key, &payload)
     })
 }
@@ -209,7 +229,7 @@ fn draft_from_input(input: DraftIn) -> Cmd<Draft> {
         algorithm: if flavor == Flavor::Steam {
             Algorithm::SHA1
         } else {
-            input.algorithm.as_deref().and_then(Algorithm::parse).unwrap_or_default()
+            Algorithm::from_opt(input.algorithm.as_deref())?
         },
         digits: if flavor == Flavor::Steam { 5 } else { input.digits.unwrap_or(6) },
         period: if flavor == Flavor::Steam { 30 } else { input.period.unwrap_or(30) },
@@ -253,19 +273,21 @@ pub fn vault_status(state: State<'_, Arc<AppState>>) -> StatusDto {
         unlocked: state.is_unlocked(),
         mode,
         // Compile-time version with a fallback so parse-level tooling also compiles.
-        version: option_env!("CARGO_PKG_VERSION").unwrap_or("1.0.0").to_string(),
+        version: option_env!("CARGO_PKG_VERSION").unwrap_or("1.1.0").to_string(),
+        recovered_from: state.recovered_from.map(|s| s.to_string()),
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn setup_vault(state: State<'_, Arc<AppState>>, mode: String, password: Option<String>) -> Cmd<()> {
+    let password = secret_str(password);
     if state.vault_path.exists() {
         return Err("a vault already exists — unlock it instead".into());
     }
     let (kdf, key) = match mode.as_str() {
         "password" => {
             let pw = password.filter(|p| !p.is_empty()).ok_or("master password required")?;
-            if pw.len() < 8 {
+            if !min_chars(&pw, 8) {
                 return Err("master password must be at least 8 characters".into());
             }
             let salt = crypto::rand_bytes::<{ crypto::SALT_LEN }>();
@@ -296,8 +318,9 @@ pub fn setup_vault(state: State<'_, Arc<AppState>>, mode: String, password: Opti
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn unlock(state: State<'_, Arc<AppState>>, password: Option<String>) -> Cmd<()> {
+    let password = secret_str(password);
     let env = vault::read_envelope(&state.vault_path)?;
     let key = match &env.kdf {
         Kdf::Argon2id { m, t, p, salt } => {
@@ -329,13 +352,15 @@ pub fn lock(state: State<'_, Arc<AppState>>) {
 /// Switch the vault's unlock method (password ↔ keychain ↔ none) or change the
 /// master password. Requires the vault to be unlocked plus, when the current
 /// method is a master password, re-entering that password.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn change_unlock_mode(
     state: State<'_, Arc<AppState>>,
     mode: String,
     current_password: Option<String>,
     new_password: Option<String>,
 ) -> Cmd<()> {
+    let current_password = secret_str(current_password);
+    let new_password = secret_str(new_password);
     state.touch();
     if vault_mode(&state)? == "password" {
         let pw = current_password
@@ -351,7 +376,7 @@ pub fn change_unlock_mode(
     let (new_kdf, new_key) = match mode.as_str() {
         "password" => {
             let pw = new_password
-                .filter(|p| p.len() >= 8)
+                .filter(|p| min_chars(p, 8))
                 .ok_or("the new master password must be at least 8 characters")?;
             let salt = crypto::rand_bytes::<{ crypto::SALT_LEN }>();
             let key = crypto::argon2id_derive(pw.as_bytes(), &salt, crypto::ARGON2_M_KIB, crypto::ARGON2_T, crypto::ARGON2_P)?;
@@ -369,14 +394,20 @@ pub fn change_unlock_mode(
     };
 
     let was_keychain = with_session(&state, |s| {
-        let payload = serde_json::to_vec(&AccountsPayloadRef { accounts: &s.accounts })
-            .map_err(|e| format!("serialize failure: {e}"))?;
+        let payload = Zeroizing::new(
+            serde_json::to_vec(&AccountsPayloadRef { accounts: &s.accounts })
+                .map_err(|e| format!("serialize failure: {e}"))?,
+        );
         vault::write_envelope(&state.vault_path, "vault", &new_kdf, &new_key, &payload)?;
         let was = matches!(s.kdf, Kdf::Keychain);
         s.kdf = new_kdf.clone();
         s.key = new_key;
         Ok(was)
     })?;
+    // The .bak still holds the vault under the PREVIOUS unlock method (for
+    // "no security" that is readable by anyone) — drop it; the next write
+    // recreates it under the new method.
+    vault::discard_backup(&state.vault_path);
     if was_keychain && mode != "keychain" {
         if let Ok(entry) = keyring::Entry::new("Authio", "vault-key") {
             let _ = entry.delete_credential();
@@ -432,7 +463,18 @@ pub fn hotp_next(state: State<'_, Arc<AppState>>, id: String) -> Cmd<CodeDto> {
             _ => Err("not an HOTP account".into()),
         }
     })?;
-    persist(&state)?;
+    if let Err(e) = persist(&state) {
+        // Do not burn a counter value that was never saved: roll it back.
+        let _ = with_session(&state, |s| {
+            if let Some(a) = s.accounts.iter_mut().find(|a| a.id == id) {
+                if let Kind::Hotp { counter } = &mut a.kind {
+                    *counter = counter.saturating_sub(1);
+                }
+            }
+            Ok(())
+        });
+        return Err(e);
+    }
     state.touch();
     Ok(dto)
 }
@@ -511,8 +553,9 @@ pub fn reorder(state: State<'_, Arc<AppState>>, ids: Vec<String>) -> Cmd<()> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn reveal_secret(state: State<'_, Arc<AppState>>, id: String, password: Option<String>) -> Cmd<SecretDto> {
+    let password = secret_str(password);
     if vault_mode(&state)? == "password" {
         let pw = password.filter(|p| !p.is_empty()).ok_or("enter your master password to reveal the secret")?;
         if !verify_master_password(&state, &pw)? {
@@ -554,7 +597,7 @@ struct PlainBackup {
     accounts: Vec<BackupAccountOut>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn export_backup(
     state: State<'_, Arc<AppState>>,
     path: String,
@@ -562,6 +605,8 @@ pub fn export_backup(
     password: Option<String>,
     master_password: Option<String>,
 ) -> Cmd<String> {
+    let password = secret_str(password);
+    let master_password = secret_str(master_password);
     // Re-authentication gate: exporting secrets requires proving vault access again.
     if vault_mode(&state)? == "password" {
         let mp = master_password
@@ -603,11 +648,11 @@ pub fn export_backup(
         encrypted,
         accounts,
     };
-    let json = serde_json::to_vec(&backup).map_err(|e| e.to_string())?;
+    let json = Zeroizing::new(serde_json::to_vec(&backup).map_err(|e| e.to_string())?);
     let dest = Path::new(&path);
 
     if encrypted {
-        let pw = password.filter(|p| p.len() >= 8).ok_or("the backup passphrase must be at least 8 characters")?;
+        let pw = password.filter(|p| min_chars(p, 8)).ok_or("the backup passphrase must be at least 8 characters")?;
         let salt = crypto::rand_bytes::<{ crypto::SALT_LEN }>();
         let key = crypto::argon2id_derive(pw.as_bytes(), &salt, crypto::ARGON2_M_KIB, crypto::ARGON2_T, crypto::ARGON2_P)?;
         let kdf = Kdf::Argon2id {
@@ -619,7 +664,8 @@ pub fn export_backup(
         vault::write_envelope(dest, "backup", &kdf, &key, &json)?;
         Ok(format!("Exported {count} account(s), encrypted with your backup passphrase."))
     } else {
-        vault::atomic_write(dest, serde_json::to_string_pretty(&backup).map_err(|e| e.to_string())?.as_bytes())?;
+        let pretty = Zeroizing::new(serde_json::to_string_pretty(&backup).map_err(|e| e.to_string())?);
+        vault::write_user_file(dest, pretty.as_bytes())?;
         Ok(format!("Exported {count} account(s) WITHOUT encryption — guard this file carefully."))
     }
 }
@@ -627,38 +673,117 @@ pub fn export_backup(
 // ---------------------------------------------------------------------------
 // Import: start (preview) → preview confirms → apply
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_text(state: State<'_, Arc<AppState>>, text: String, password: Option<String>) -> Cmd<PreviewDto> {
-    do_import(&state, &text, password.as_deref())
+    let password = secret_str(password);
+    do_import(&state, &text, password.as_ref().map(|p| p.as_str()))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_file(state: State<'_, Arc<AppState>>, path: String, password: Option<String>) -> Cmd<PreviewDto> {
+    let password = secret_str(password);
     let bytes = std::fs::read(&path).map_err(|e| format!("cannot read file: {e}"))?;
     let text = String::from_utf8(bytes).map_err(|_| "file is not UTF-8 text (backups are JSON/text files)".to_string())?;
-    do_import(&state, &text, password.as_deref())
+    do_import(&state, &text, password.as_ref().map(|p| p.as_str()))
 }
 
-#[tauri::command]
-pub fn import_qr(state: State<'_, Arc<AppState>>, path: String) -> Cmd<PreviewDto> {
+/// Maximum images per batch (guards against selecting a whole photo library).
+const MAX_QR_FILES: usize = 50;
+
+/// Read every QR code from one or more images and stage ALL their accounts as a
+/// single pending import (one preview, one confirmation). An image without a
+/// readable QR, or with an unusable one, never aborts the rest of the batch.
+#[tauri::command(async)]
+pub fn import_qr_files(state: State<'_, Arc<AppState>>, paths: Vec<String>) -> Cmd<PreviewDto> {
     state.touch();
-    let content = qr::decode_qr_from_file(&path)?;
-    if content.trim_start().starts_with("otpauth-migration://") {
-        return do_import(&state, &content, None);
+    if paths.is_empty() {
+        return Err("no image selected".into());
     }
-    // Single otpauth:// — also route through the preview for consistent UX.
-    do_import(&state, &content, None)
+    if paths.len() > MAX_QR_FILES {
+        return Err(format!("too many images selected (max {MAX_QR_FILES} at a time)"));
+    }
+    let mut drafts: Vec<Draft> = Vec::new();
+    let mut skipped = 0u32;
+    let mut files_failed = 0u32;
+    let mut merged = 0u32;
+    let mut first_err: Option<String> = None;
+    let mut formats: Vec<String> = Vec::new();
+
+    for path in &paths {
+        let contents = match qr::decode_all_from_file(path) {
+            Ok(c) => c,
+            Err(e) => {
+                files_failed += 1;
+                first_err.get_or_insert(e);
+                continue;
+            }
+        };
+        let mut file_ok = false;
+        for content in contents {
+            match importers::parse_text(&content, None) {
+                Ok(o) if !o.needs_password => {
+                    file_ok = true;
+                    skipped += o.skipped;
+                    if !formats.contains(&o.format) {
+                        formats.push(o.format.clone());
+                    }
+                    for d in o.drafts {
+                        // The same account scanned twice (two screenshots, or a QR
+                        // repeated in several images) is merged, not listed twice.
+                        if drafts.iter().any(|x| x.secret.as_slice() == d.secret.as_slice()) {
+                            merged += 1;
+                        } else {
+                            drafts.push(d);
+                        }
+                    }
+                }
+                Ok(_) => skipped += 1,
+                Err(e) => {
+                    // A QR that is not an authenticator code (a URL, Wi-Fi, …).
+                    skipped += 1;
+                    first_err.get_or_insert(e);
+                }
+            }
+        }
+        if !file_ok {
+            files_failed += 1;
+        }
+    }
+    if drafts.is_empty() {
+        return Err(first_err.unwrap_or_else(|| "no QR code found in the selected images".into()));
+    }
+    let format = if formats.len() == 1 { formats.remove(0) } else { "qr".to_string() };
+    build_preview(&state, format, drafts, skipped, (paths.len() as u32, files_failed, merged))
 }
 
 fn do_import(state: &AppState, text: &str, password: Option<&str>) -> Cmd<PreviewDto> {
     let outcome = importers::parse_text(text, password)?;
     if outcome.needs_password {
-        return Ok(PreviewDto { format: outcome.format, needs_password: true, skipped: 0, entries: Vec::new() });
+        return Ok(PreviewDto {
+            format: outcome.format,
+            needs_password: true,
+            skipped: 0,
+            entries: Vec::new(),
+            files_total: 0,
+            files_failed: 0,
+            merged_duplicates: 0,
+        });
     }
+    build_preview(state, outcome.format, outcome.drafts, outcome.skipped, (0, 0, 0))
+}
+
+/// Stage `drafts` as the pending import and describe them for the preview dialog.
+/// `batch` = (files_total, files_failed, merged_duplicates).
+fn build_preview(
+    state: &AppState,
+    format: String,
+    drafts: Vec<Draft>,
+    skipped: u32,
+    batch: (u32, u32, u32),
+) -> Cmd<PreviewDto> {
     state.touch();
     let entries = with_session(state, |s| {
-        Ok(outcome
-            .drafts
+        Ok(drafts
             .iter()
             .enumerate()
             .map(|(i, d)| PreviewEntry {
@@ -677,8 +802,16 @@ fn do_import(state: &AppState, text: &str, password: Option<&str>) -> Cmd<Previe
             .collect::<Vec<_>>())
     })?;
     let mut guard = state.pending.lock().map_err(|_| "internal error (state lock)".to_string())?;
-    *guard = Some(PendingImport { drafts: outcome.drafts });
-    Ok(PreviewDto { format: outcome.format, needs_password: false, skipped: outcome.skipped, entries })
+    *guard = Some(PendingImport { drafts });
+    Ok(PreviewDto {
+        format,
+        needs_password: false,
+        skipped,
+        entries,
+        files_total: batch.0,
+        files_failed: batch.1,
+        merged_duplicates: batch.2,
+    })
 }
 
 #[tauri::command]

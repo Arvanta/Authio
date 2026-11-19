@@ -25,6 +25,7 @@
     "password": "主密码",
     "unlock": "解锁",
     "auto": "为了安全已自动锁定。",
+    "recovered": "您的保险库文件已损坏或之前的保存被中断，已从最新备份副本恢复。请检查您的账户。",
     "subtitle": {
       "password": "输入主密码以解锁你的验证码。",
       "keychain": "保险库会随你的 Windows 会话一起解锁。",
@@ -84,7 +85,7 @@
     "title": "添加账户",
     "qr": {
       "choose": "选择图片…",
-      "hint": "选择二维码的截图或照片（PNG 或 JPEG）。支持 Google Authenticator 导出的二维码。"
+      "hint": "选择一张或多张二维码截图或照片（PNG 或 JPEG）。一张图片可包含多个二维码。支持 Google Authenticator 导出二维码。"
     },
     "uri": {
       "label": "粘贴 otpauth:// 链接",
@@ -135,6 +136,7 @@
       "title": "检查导入",
       "format": "检测到的格式",
       "skipped": "已跳过 {n} 条格式错误的条目",
+      "batch": "已扫描 {files} 张图片 · {failed} 张无可用二维码 · 合并 {merged} 个重复项",
       "dupe": "重复",
       "none": "未找到账户。",
       "submit": "导入所选（{n}）",
@@ -174,6 +176,7 @@
     "data": "数据",
     "unlock_method": "解锁方式",
     "timer_number": "在计时环内显示倒计时数字",
+    "show_avatars": "在条目开头显示图标（行视图）",
     "change": "更改…",
     "about": "Authio {v} — 自由开源软件（MIT）。完全离线：无网络、无遥测、无账户。你的密钥永远不会离开这台设备。",
     "saved": "设置已保存",

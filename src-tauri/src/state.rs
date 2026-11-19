@@ -29,11 +29,16 @@ pub struct AppState {
     pub pending: Mutex<Option<PendingImport>>,
     pub last_activity: Mutex<Instant>,
     pub last_geo_save: Mutex<Instant>,
+    /// Set when startup self-heal restored the vault from `tmp`/`bak`.
+    pub recovered_from: Option<&'static str>,
 }
 
 impl AppState {
     pub fn new(dir: PathBuf) -> Self {
         let _ = std::fs::create_dir_all(&dir);
+        // Self-heal an interrupted/damaged vault write BEFORE anything asks
+        // whether a vault exists (a missing vault.json would offer "set up new").
+        let recovered_from = crate::vault::recover_vault(&dir.join("vault.json"));
         let settings_path = dir.join("settings.json");
         let settings = std::fs::read_to_string(&settings_path)
             .ok()
@@ -47,6 +52,7 @@ impl AppState {
             pending: Mutex::new(None),
             last_activity: Mutex::new(Instant::now()),
             last_geo_save: Mutex::new(Instant::now() - std::time::Duration::from_secs(60)),
+            recovered_from,
         }
     }
 

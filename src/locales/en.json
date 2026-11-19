@@ -25,6 +25,7 @@
     "password": "Master password",
     "unlock": "Unlock",
     "auto": "Locked automatically for your safety.",
+    "recovered": "Your vault file was damaged or an earlier save was interrupted, so it was restored from the latest backup copy. Please check your accounts.",
     "subtitle": {
       "password": "Enter your master password to unlock your codes.",
       "keychain": "Your vault unlocks with your Windows session.",
@@ -83,8 +84,8 @@
   "add": {
     "title": "Add account",
     "qr": {
-      "choose": "Choose an image…",
-      "hint": "Select a screenshot or photo of a QR code (PNG or JPEG). Google Authenticator export QRs are supported."
+      "choose": "Choose images…",
+      "hint": "Select one or more screenshots or photos of QR codes (PNG or JPEG). An image may contain several QR codes. Google Authenticator export QRs are supported."
     },
     "uri": {
       "label": "Paste an otpauth:// URI",
@@ -135,6 +136,7 @@
       "title": "Review import",
       "format": "Detected format",
       "skipped": "{n} malformed entr(ies) skipped",
+      "batch": "{files} image(s) scanned · {failed} without a usable QR code · {merged} duplicate(s) merged",
       "dupe": "duplicate",
       "none": "No accounts found.",
       "submit": "Import selected ({n})",
@@ -174,6 +176,7 @@
     "data": "Data",
     "unlock_method": "Unlock method",
     "timer_number": "Show countdown number inside the timer ring",
+    "show_avatars": "Show icons at the start of items (rows view)",
     "change": "Change…",
     "about": "Authio {v} — free and open source (MIT). Fully offline: no internet, no telemetry, no accounts. Your secrets never leave this device.",
     "saved": "Settings saved",

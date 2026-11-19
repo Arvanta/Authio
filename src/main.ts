@@ -16,7 +16,7 @@ const ICONS = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   lock: '<rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
   gear:
-    '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/>',
+    '<path d="M9.77 4.94 L10.18 2.17 L13.82 2.17 L14.23 4.94 L15.42 5.44 L17.66 3.76 L20.24 6.34 L18.56 8.58 L19.06 9.77 L21.83 10.18 L21.83 13.82 L19.06 14.23 L18.56 15.42 L20.24 17.66 L17.66 20.24 L15.42 18.56 L14.23 19.06 L13.82 21.83 L10.18 21.83 L9.77 19.06 L8.58 18.56 L6.34 20.24 L3.76 17.66 L5.44 15.42 L4.94 14.23 L2.17 13.82 L2.17 10.18 L4.94 9.77 L5.44 8.58 L3.76 6.34 L6.34 3.76 L8.58 5.44 Z"/><circle cx="12" cy="12" r="3"/>',
   upload: '<path d="M12 15V3m0 0L8 7m4-4 4 4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>',
   download:
     '<path d="M12 3v10m0 0L8 9m4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>',
@@ -189,7 +189,8 @@ let settings: Settings = {
   lang: "en",
   view_mode: "rows",
   show_timer_number: true,
-  grouped_view: false,
+  grouped_view: true,
+  show_avatars: true,
   tray: true,
 };
 let accounts: AccountDto[] = [];
@@ -236,6 +237,17 @@ for (const ev of ["pointerdown", "keydown"] as const) {
 function setRoute(r: Route) {
   route = r;
   app.innerHTML = "";
+  if (r !== "main") {
+    // Leaving the main screen (lock / setup) must leave NOTHING behind: dialogs and
+    // menus are mounted on <body>, outside #app — an open "reveal secret" dialog
+    // would otherwise stay visible on top of the lock screen.
+    closeMenu();
+    document.querySelectorAll(".overlay, .menu").forEach((n) => n.remove());
+    accounts = [];
+    search = "";
+    lastHotp.clear();
+    hidden.clear();
+  }
 }
 
 async function refreshStatus(): Promise<StatusDto> {
@@ -652,7 +664,10 @@ function accountCard(a: AccountDto): HTMLElement {
     });
   }
 
-  card.append(avatar, meta, actions);
+  // Rows view: the letter avatar is optional (Settings → "Show icons …").
+  if (settings.show_avatars) card.append(avatar);
+  else card.classList.add("no-avatar");
+  card.append(meta, actions);
   return card;
 }
 
@@ -861,7 +876,10 @@ function renderList() {
       const items = list
         .filter((a) => a.group === g)
         .sort((x, y) => Number(y.pinned) - Number(x.pinned) || cmp(x, y));
-      listHost.append(el("div", "section-label", g || t("group.ungrouped")));
+      // With no groups defined at all, a lone "Ungrouped" heading is just noise.
+      if (!(groups.length === 1 && g === "")) {
+        listHost.append(el("div", "section-label", g || t("group.ungrouped")));
+      }
       items.forEach((a) => listHost.append(mkCard(a)));
     }
     return;
@@ -1008,16 +1026,19 @@ function openAddModal() {
       const pick = el("button", "btn primary block", t("add.qr.choose"));
       pick.prepend(icon("qr"));
       pick.onclick = async () => {
-        const path = await open({
-          multiple: false,
+        const picked = await open({
+          multiple: true,
           filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg"] }],
         });
-        if (!path || typeof path !== "string") return;
+        const paths = Array.isArray(picked) ? picked : typeof picked === "string" ? [picked] : [];
+        if (paths.length === 0) return;
+        pick.disabled = true;
         try {
-          const preview = await api.importQr(path);
+          const preview = await api.importQrFiles(paths);
           h.close();
           openImportPreview(preview);
         } catch (e) {
+          pick.disabled = false;
           toast(fmtError(e), true);
         }
       };
@@ -1263,6 +1284,19 @@ function openImportPreview(preview: PreviewDto) {
   meta.append(fmt);
   if (preview.skipped > 0) meta.append(el("span", "", t("import.preview.skipped", { n: preview.skipped })));
   h.body.append(meta);
+  if ((preview.files_total ?? 0) > 1 || (preview.files_failed ?? 0) > 0 || (preview.merged_duplicates ?? 0) > 0) {
+    h.body.append(
+      el(
+        "p",
+        "hint",
+        t("import.preview.batch", {
+          files: preview.files_total ?? 0,
+          failed: preview.files_failed ?? 0,
+          merged: preview.merged_duplicates ?? 0,
+        }),
+      ),
+    );
+  }
 
   const selected = new Set<number>();
   preview.entries.forEach((e) => {
@@ -1597,6 +1631,17 @@ async function openSettingsModal() {
     void pollCodes();
   };
 
+  // letter avatars in the rows view
+  const avSw = el("input", "switch") as HTMLInputElement;
+  avSw.type = "checkbox";
+  avSw.checked = settings.show_avatars;
+  avSw.onchange = () => {
+    settings.show_avatars = avSw.checked;
+    void save();
+    renderList();
+    void pollCodes();
+  };
+
   // ---- data: import / export live here in settings
   const dataTitle = el("div", "section-label", t("settings.data"));
   dataTitle.style.margin = "10px 0 0";
@@ -1633,7 +1678,7 @@ async function openSettingsModal() {
   // ---- about
   const aboutTitle = el("div", "section-label", t("about.title"));
   aboutTitle.style.margin = "10px 0 0";
-  const ver = statusInfo?.version ?? "1.0.0";
+  const ver = statusInfo?.version ?? "1.1.0";
   const aboutCard = el("div", "about-card");
   const aName = el("div", "a-name");
   aName.append(el("span", "", t("app.name")), el("span", "ver", `v${ver}`));
@@ -1656,6 +1701,7 @@ async function openSettingsModal() {
     mkRow(t("settings.sort_alpha"), null, alphaSw),
     mkRow(t("settings.hide_codes"), null, hideSw),
     mkRow(t("settings.timer_number"), null, numSw),
+    mkRow(t("settings.show_avatars"), null, avSw),
     mkRow(t("settings.autolock"), t("settings.autolock.off"), lockWrap),
     mkRow(t("settings.lock_minimize"), null, minSw),
     mkRow(t("settings.tray"), null, traySw),
@@ -1918,6 +1964,8 @@ async function boot() {
   } catch (e) {
     toast(fmtError(e), true);
   }
+
+  if (statusInfo?.recovered_from) toast(t("lock.recovered"));
 
   // 1 Hz code pump.
   setInterval(() => void pollCodes(), 1000);

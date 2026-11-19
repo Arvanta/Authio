@@ -39,9 +39,11 @@ the master-password mode is the recommendation for high-value secrets.
 
 ## Memory & process hardening
 
-- `Zeroizing` containers for the master key, derived keys, and per-account secret bytes.
+- `Zeroizing` containers for the master key, derived keys, per-account secret bytes, the decrypted/serialised vault payload buffers, and password strings received over IPC. This is **best effort**: transient copies made by the JSON parser, the WebView/IPC layer or the OS (swap, crash dumps) are outside the app's control.
+- KDF parameters read from untrusted files (backups, Aegis) are range-checked, so a crafted header cannot exhaust memory.
 - Session + pending-import drafts are dropped (zeroized) on: manual lock, auto-lock,
   minimize-lock, and window close.
+- **Lock wipes the UI too**: on every lock, open dialogs/menus (e.g. a revealed secret) are removed from the DOM along with the cached account list.
 - **Screen-capture protection**: `set_content_protected(true)` — screenshots and
   screen-share see a black window (Windows).
 - No secrets/codes are ever logged; there is no persistent logging at all in v1.

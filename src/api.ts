@@ -15,6 +15,7 @@ export interface AccountDto {
   digits: number;
   period: number;
   counter: number;
+  flavor?: "standard" | "steam" | string;
 }
 
 export interface CodeDto {
@@ -29,6 +30,8 @@ export interface StatusDto {
   unlocked: boolean;
   mode: UnlockMode | null;
   version: string;
+  /** "tmp" | "bak" when the vault was auto-restored at startup. */
+  recovered_from?: string | null;
 }
 
 export interface PreviewEntry {
@@ -47,6 +50,10 @@ export interface PreviewDto {
   needs_password: boolean;
   skipped: number;
   entries: PreviewEntry[];
+  /** Multi-image QR import only: images processed / without a readable QR / duplicates merged. */
+  files_total?: number;
+  files_failed?: number;
+  merged_duplicates?: number;
 }
 
 export interface SecretDto {
@@ -65,6 +72,7 @@ export interface Settings {
   view_mode: "rows" | "tiles" | string;
   show_timer_number: boolean;
   grouped_view: boolean;
+  show_avatars: boolean; // rows view: letter avatar at the start of each item
   tray: boolean;
   lang: string; // "en" | "de" | "es" | "fr" | "ja" | "ko" | "pt" | "ru" | "zh-CN"
   window?: { x: number; y: number; w: number; h: number } | null;
@@ -114,7 +122,7 @@ export const api = {
 
   importFile: (path: string, password: string | null) => invoke<PreviewDto>("import_file", { path, password }),
   importText: (text: string, password: string | null) => invoke<PreviewDto>("import_text", { text, password }),
-  importQr: (path: string) => invoke<PreviewDto>("import_qr", { path }),
+  importQrFiles: (paths: string[]) => invoke<PreviewDto>("import_qr_files", { paths }),
   importApply: (indices: number[]) => invoke<AccountDto[]>("import_apply", { indices }),
 
   getSettings: () => invoke<Settings>("get_settings"),

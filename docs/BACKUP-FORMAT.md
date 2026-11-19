@@ -72,5 +72,5 @@ Field rules:
 
 - Importing either shape runs through the same pipeline: format detection → optional
   decryption → per-account validation → duplicate detection → user confirmation.
-- Malformed accounts are skipped and counted; tampered encrypted files produce a
+- Malformed accounts are skipped and counted (the rest of the file is still restored; if *no* account is valid the import fails); tampered encrypted files produce a
   precise error and never a partial silent import.
