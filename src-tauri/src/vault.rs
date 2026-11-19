@@ -50,6 +50,10 @@ pub struct Envelope {
     pub kdf: Kdf,
     pub cipher: Cipher,
     pub data: String, // base64 ciphertext
+    /// Random per-vault id (vault.json only). Names the vault's credential-store entry and
+    /// lets the app notice that the file was swapped. Absent in vaults made by Authio 1.0.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vault_id: Option<String>,
 }
 
 pub fn read_envelope(path: &Path) -> Result<Envelope, String> {
@@ -81,6 +85,17 @@ pub fn write_envelope(
     key: &[u8; crypto::KEY_LEN],
     payload: &[u8],
 ) -> Result<(), String> {
+    write_envelope_id(path, kind, kdf, key, payload, None)
+}
+
+pub fn write_envelope_id(
+    path: &Path,
+    kind: &str,
+    kdf: &Kdf,
+    key: &[u8; crypto::KEY_LEN],
+    payload: &[u8],
+    vault_id: Option<&str>,
+) -> Result<(), String> {
     use base64::{engine::general_purpose::STANDARD, Engine as _};
     let (nonce, ct) = crypto::encrypt(key, payload)?;
     let env = Envelope {
@@ -93,6 +108,7 @@ pub fn write_envelope(
             nonce: STANDARD.encode(nonce),
         },
         data: STANDARD.encode(ct),
+        vault_id: vault_id.map(|v| v.to_string()),
     };
     let json = serde_json::to_string_pretty(&env).map_err(|e| e.to_string())?;
     if kind == "vault" {

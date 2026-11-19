@@ -204,7 +204,7 @@
     "newmode": "Nouvelle méthode",
     "mismatch": "Les mots de passe ne correspondent pas",
     "submit": "Appliquer",
-    "done": "Méthode de déverrouillage mise à jour",
+    "done": "Méthode de déverrouillage mise à jour. Une nouvelle clé de chiffrement a été créée ; les copies du fichier du coffre faites auparavant s'ouvrent toujours avec l'ancienne clé ou l'ancien mot de passe.",
     "new_password": "Nouveau mot de passe maître (8 min.)",
     "new_password2": "Répéter le nouveau mot de passe",
     "none.warn": "Attention : toute personne ayant accès à cet appareil pourra lire tous vos secrets ; captures et exports non protégés."
@@ -230,5 +230,17 @@
     "imported": "{n} compte(s) importé(s)",
     "deleted": "Compte supprimé",
     "updated": "Compte mis à jour"
+  },
+  "integrity": {
+    "title": "Fichier du coffre modifié",
+    "mode_changed": "La méthode de déverrouillage de ce fichier de coffre est passée de « {was} » à « {now} » depuis la dernière ouverture par Authio, et pas via Authio. Si ce n'est pas vous, le fichier a peut-être été remplacé : n'y ajoutez pas de comptes.",
+    "vault_replaced": "Ce fichier est un autre coffre que celui qu'Authio a ouvert en dernier (même méthode, identité différente). Si vous ne l'avez pas remplacé ou restauré vous-même, ne l'utilisez pas.",
+    "trust": "C'est moi qui ai fait ce changement – continuer",
+    "exit": "Fermer Authio",
+    "mode": {
+      "password": "mot de passe maître",
+      "keychain": "trousseau Windows",
+      "none": "aucune sécurité"
+    }
   }
 }

@@ -130,7 +130,8 @@ tiles layout) — use it as a visual QA gate.
 15. Dialogs/menus live on `<body>`, not `#app` — `setRoute()` removes them when leaving `main`; keep it that way for any new overlay.
 16. Heavy KDF commands are `#[tauri::command(async)]` so Argon2 never freezes the UI thread.
 17. Google-migration protobuf: field keys are `0x20/0x28/0x30` (wire 0) for algorithm/digits/type — an older test used wrong keys and only passed because the parser was lax.
-18. GitHub Actions: commit `Cargo.lock`; keep workflow triggers tag-only; use `--force-with-lease`, never `--force`, when rewriting divergence.
+18. Key handling lives behind the `KeyStore` trait (`keystore.rs`); `setup_vault_inner` / `unlock_inner` / `change_unlock_mode_inner` are unit-tested with an in-memory store. Never write `keyring::Entry` calls directly; never reuse a key across unlock methods; never delete the legacy `vault-key` entry (other instances may depend on it).
+19. GitHub Actions: commit `Cargo.lock`; keep workflow triggers tag-only; use `--force-with-lease`, never `--force`, when rewriting divergence.
 
 ## 8. Extending
 

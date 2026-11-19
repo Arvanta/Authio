@@ -32,6 +32,8 @@ export interface StatusDto {
   version: string;
   /** "tmp" | "bak" when the vault was auto-restored at startup. */
   recovered_from?: string | null;
+  /** Vault file's unlock method / identity differs from what this app last saw (changed outside the app). */
+  integrity_warning?: { kind: "mode_changed" | "vault_replaced"; was_mode: string; now_mode: string } | null;
 }
 
 export interface PreviewEntry {
@@ -130,6 +132,9 @@ export const api = {
   /** "github" | "donate" — backend hardcodes the URLs, opens the default browser. */
   openUrl: (target: string) => invoke<void>("open_url", { target }),
   userActivity: () => invoke<void>("user_activity"),
+  /** The user confirmed the vault file in its current state is legitimate. */
+  trustVaultState: () => invoke<void>("trust_vault_state"),
+  exitApp: () => invoke<void>("exit_app"),
 };
 
 /** Storage key for UI-only ephemeral preferences (never secrets). */

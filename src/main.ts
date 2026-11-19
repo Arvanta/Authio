@@ -74,7 +74,7 @@ function iconBtn(name: IconName, title: string, cls = ""): HTMLButtonElement {
   return b;
 }
 
-function toast(msg: string, isErr = false) {
+function toast(msg: string, isErr = false, ms = 2600) {
   let host = document.querySelector<HTMLElement>(".toasts");
   if (!host) {
     host = el("div", "toasts");
@@ -82,7 +82,7 @@ function toast(msg: string, isErr = false) {
   }
   const tEl = el("div", `toast${isErr ? " err" : ""}`, msg);
   host.append(tEl);
-  setTimeout(() => tEl.remove(), 2600);
+  setTimeout(() => tEl.remove(), ms);
 }
 
 interface ModalHandle {
@@ -253,6 +253,51 @@ function setRoute(r: Route) {
 async function refreshStatus(): Promise<StatusDto> {
   statusInfo = await api.status();
   return statusInfo;
+}
+
+let integrityDialogOpen = false;
+
+/**
+ * The vault file's unlock method / identity changed OUTSIDE the app (e.g. swapped for another
+ * vault). Ask before anything is unlocked or added. Returns false when the app is being closed.
+ */
+async function guardIntegrity(): Promise<boolean> {
+  const w = statusInfo?.integrity_warning;
+  if (!w || integrityDialogOpen) return true;
+  integrityDialogOpen = true;
+  const modeName = (m: string) => t(`integrity.mode.${m}`);
+  const trusted = await new Promise<boolean>((resolve) => {
+    const h = openModal(t("integrity.title"), false);
+    h.body.append(
+      el(
+        "p",
+        "hint",
+        t(w.kind === "vault_replaced" ? "integrity.vault_replaced" : "integrity.mode_changed", {
+          was: modeName(w.was_mode),
+          now: modeName(w.now_mode),
+        }),
+      ),
+    );
+    const exit = el("button", "btn primary", t("integrity.exit"));
+    exit.onclick = () => {
+      h.close();
+      resolve(false);
+    };
+    const trust = el("button", "btn danger", t("integrity.trust"));
+    trust.onclick = () => {
+      h.close();
+      resolve(true);
+    };
+    h.modal.append(footer(trust, exit));
+  });
+  integrityDialogOpen = false;
+  if (!trusted) {
+    await api.exitApp().catch(() => undefined);
+    return false;
+  }
+  await api.trustVaultState();
+  await refreshStatus();
+  return true;
 }
 
 /* ------------------------------------------------------------------ setup */
@@ -810,6 +855,7 @@ async function pollCodes() {
     if (fmtError(e).includes("locked")) {
       await refreshStatus();
       renderLock(true);
+      await guardIntegrity();
     }
   }
 }
@@ -1808,7 +1854,7 @@ function openChangeUnlockModal(onDone?: (m: UnlockMode) => void) {
       curPw.value = new1.value = new2.value = "";
       await refreshStatus();
       onDone?.(target);
-      toast(t("chg.done"));
+      toast(t("chg.done"), false, 6500);
       h.close();
     } catch (e) {
       err.textContent = fmtError(e);
@@ -1936,6 +1982,7 @@ async function boot() {
   await listen("authio://locked", async () => {
     await refreshStatus().catch(() => undefined);
     renderLock(true);
+    await guardIntegrity();
   });
 
   document.addEventListener("visibilitychange", () => {
@@ -1966,6 +2013,9 @@ async function boot() {
   }
 
   if (statusInfo?.recovered_from) toast(t("lock.recovered"));
+
+  // Before anything is unlocked (incl. the automatic unlock of keychain / no-security vaults).
+  if (!(await guardIntegrity())) return;
 
   // 1 Hz code pump.
   setInterval(() => void pollCodes(), 1000);

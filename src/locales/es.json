@@ -204,7 +204,7 @@
     "newmode": "Nuevo método",
     "mismatch": "Las contraseñas no coinciden",
     "submit": "Aplicar",
-    "done": "Método de desbloqueo actualizado",
+    "done": "Método de desbloqueo actualizado. Se creó una clave de cifrado nueva; las copias del archivo de la bóveda hechas antes siguen abriéndose con la clave o contraseña anterior.",
     "new_password": "Nueva contraseña maestra (mín. 8)",
     "new_password2": "Repite la nueva contraseña",
     "none.warn": "Aviso: cualquier persona con acceso a este dispositivo podrá leer todos tus secretos; capturas y exportaciones sin protección."
@@ -230,5 +230,17 @@
     "imported": "{n} cuenta(s) importada(s)",
     "deleted": "Cuenta eliminada",
     "updated": "Cuenta actualizada"
+  },
+  "integrity": {
+    "title": "Archivo de bóveda modificado",
+    "mode_changed": "El método de desbloqueo de este archivo de bóveda cambió de «{was}» a «{now}» desde la última vez que Authio lo abrió, y no fue a través de Authio. Si no lo hiciste tú, el archivo pudo haber sido reemplazado: no añadas cuentas.",
+    "vault_replaced": "Este archivo es una bóveda distinta de la que Authio abrió por última vez (mismo método de desbloqueo, distinta identidad). Si no la reemplazaste o restauraste tú, no la uses.",
+    "trust": "Yo hice este cambio: continuar",
+    "exit": "Cerrar Authio",
+    "mode": {
+      "password": "contraseña maestra",
+      "keychain": "llavero de Windows",
+      "none": "sin seguridad"
+    }
   }
 }

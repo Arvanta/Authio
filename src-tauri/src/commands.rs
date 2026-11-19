@@ -10,7 +10,7 @@ use crate::model::{now_unix, Account, Algorithm, Draft, DraftIn, Flavor, Kind, S
 use crate::otpauth::{b32_decode, b32_encode};
 use crate::state::{AppState, PendingImport, Session};
 use crate::vault::{self, Kdf};
-use crate::{crypto, importers, otp, otpauth, qr};
+use crate::{crypto, importers, keystore, otp, otpauth, qr};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -67,6 +67,9 @@ pub struct StatusDto {
     pub version: String,
     /// "tmp" | "bak" when the vault was auto-restored at startup (UI shows a notice once).
     pub recovered_from: Option<String>,
+    /// Set when the vault file's unlock method / identity differs from what this app last saw
+    /// (changed outside the app). The UI must ask the user before unlocking.
+    pub integrity_warning: Option<IntegrityWarningDto>,
 }
 
 #[derive(Serialize)]
@@ -172,7 +175,8 @@ fn persist(state: &AppState) -> Cmd<()> {
             serde_json::to_vec(&AccountsPayloadRef { accounts: &s.accounts })
                 .map_err(|e| format!("serialize failure: {e}"))?,
         );
-        vault::write_envelope(&state.vault_path, "vault", &s.kdf, &s.key, &payload)
+        let id = (!s.vault_id.is_empty()).then_some(s.vault_id.as_str());
+        vault::write_envelope_id(&state.vault_path, "vault", &s.kdf, &s.key, &payload, id)
     })
 }
 
@@ -180,21 +184,65 @@ fn new_id() -> String {
     crypto::rand_bytes::<16>().iter().map(|b| format!("{b:02x}")).collect()
 }
 
-fn keyring_store(key: &[u8; 32]) -> Cmd<()> {
-    let entry = keyring::Entry::new("Authio", "vault-key").map_err(|e| format!("OS credential store error: {e}"))?;
-    entry
-        .set_password(&STANDARD.encode(key))
+fn store_key(state: &AppState, user: &str, key: &[u8; 32]) -> Cmd<()> {
+    state
+        .keystore
+        .set(user, &STANDARD.encode(key))
         .map_err(|e| format!("could not store the vault key in the OS credential store: {e}"))
 }
 
-fn keyring_load() -> Cmd<Zeroizing<[u8; 32]>> {
-    let entry = keyring::Entry::new("Authio", "vault-key").map_err(|e| format!("OS credential store error: {e}"))?;
-    let encoded = entry
-        .get_password()
-        .map_err(|_| "vault key not found in the OS credential store".to_string())?;
-    let raw = STANDARD.decode(&encoded).map_err(|_| "corrupt keychain entry".to_string())?;
-    let arr: [u8; 32] = raw.try_into().map_err(|_| "corrupt keychain entry (bad length)".to_string())?;
+fn load_key(state: &AppState, user: &str) -> Cmd<Zeroizing<[u8; 32]>> {
+    let encoded = Zeroizing::new(
+        state
+            .keystore
+            .get(user)
+            .map_err(|_| "vault key not found in the OS credential store".to_string())?,
+    );
+    let raw = Zeroizing::new(STANDARD.decode(encoded.as_bytes()).map_err(|_| "corrupt keychain entry".to_string())?);
+    let arr: [u8; 32] = raw.as_slice().try_into().map_err(|_| "corrupt keychain entry (bad length)".to_string())?;
     Ok(Zeroizing::new(arr))
+}
+
+// ---- "has the vault file been swapped?" record --------------------------------------------
+// The last mode + id seen for this data directory is kept in the OS credential store (not in a
+// file the same attacker could edit). A mismatch means the vault changed OUTSIDE the app.
+
+#[derive(Serialize, Deserialize)]
+struct IntegrityRecord {
+    id: String,
+    mode: String,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct IntegrityWarningDto {
+    /// "mode_changed" | "vault_replaced"
+    pub kind: String,
+    pub was_mode: String,
+    pub now_mode: String,
+}
+
+fn record_integrity(state: &AppState, mode: &str, id: &str) {
+    let rec = IntegrityRecord { id: id.to_string(), mode: mode.to_string() };
+    if let Ok(json) = serde_json::to_string(&rec) {
+        let _ = state.keystore.set(&keystore::state_user(&state.vault_path), &json);
+    }
+}
+
+/// Trust-on-first-use: with no record yet (fresh install, upgrade from 1.0, credential store
+/// unavailable) there is nothing to compare against and no warning is raised.
+fn integrity_warning(state: &AppState, env: &vault::Envelope) -> Option<IntegrityWarningDto> {
+    let raw = state.keystore.get(&keystore::state_user(&state.vault_path)).ok()?;
+    let rec: IntegrityRecord = serde_json::from_str(&raw).ok()?;
+    let now_mode = env.kdf.mode_name().to_string();
+    let now_id = env.vault_id.clone().unwrap_or_default();
+    let kind = if rec.mode != now_mode {
+        "mode_changed"
+    } else if !rec.id.is_empty() && rec.id != now_id {
+        "vault_replaced"
+    } else {
+        return None;
+    };
+    Some(IntegrityWarningDto { kind: kind.into(), was_mode: rec.mode, now_mode })
 }
 
 /// Re-derive from the stored vault header and attempt decryption — proves the
@@ -268,6 +316,11 @@ pub fn vault_status(state: State<'_, Arc<AppState>>) -> StatusDto {
     } else {
         None
     };
+    let integrity_warning = if initialized && !state.is_unlocked() {
+        vault::read_envelope(&state.vault_path).ok().and_then(|e| integrity_warning(&state, &e))
+    } else {
+        None
+    };
     StatusDto {
         initialized,
         unlocked: state.is_unlocked(),
@@ -275,19 +328,26 @@ pub fn vault_status(state: State<'_, Arc<AppState>>) -> StatusDto {
         // Compile-time version with a fallback so parse-level tooling also compiles.
         version: option_env!("CARGO_PKG_VERSION").unwrap_or("1.1.0").to_string(),
         recovered_from: state.recovered_from.map(|s| s.to_string()),
+        integrity_warning,
     }
 }
 
 #[tauri::command(async)]
 pub fn setup_vault(state: State<'_, Arc<AppState>>, mode: String, password: Option<String>) -> Cmd<()> {
     let password = secret_str(password);
+    setup_vault_inner(&state, &mode, password.as_ref().map(|p| p.as_str()))
+}
+
+fn setup_vault_inner(state: &AppState, mode: &str, password: Option<&str>) -> Cmd<()> {
     if state.vault_path.exists() {
         return Err("a vault already exists — unlock it instead".into());
     }
-    let (kdf, key) = match mode.as_str() {
+    let vault_id = new_id();
+    let mut created_entry: Option<String> = None;
+    let (kdf, key) = match mode {
         "password" => {
             let pw = password.filter(|p| !p.is_empty()).ok_or("master password required")?;
-            if !min_chars(&pw, 8) {
+            if !min_chars(pw, 8) {
                 return Err("master password must be at least 8 characters".into());
             }
             let salt = crypto::rand_bytes::<{ crypto::SALT_LEN }>();
@@ -298,22 +358,29 @@ pub fn setup_vault(state: State<'_, Arc<AppState>>, mode: String, password: Opti
             )
         }
         "keychain" => {
-            let key = crypto::rand_bytes::<32>();
-            keyring_store(&key)?;
-            (Kdf::Keychain, Zeroizing::new(key))
+            // The entry is named after THIS vault's random id, so creating a vault can never
+            // overwrite the key of another vault (installed + portable copies, re-installs …).
+            let key = Zeroizing::new(crypto::rand_bytes::<32>());
+            let user = keystore::key_user(&vault_id);
+            store_key(state, &user, &key)?;
+            created_entry = Some(user);
+            (Kdf::Keychain, key)
         }
         "none" => {
-            let key = crypto::rand_bytes::<32>();
-            (
-                Kdf::None { key: STANDARD.encode(key) },
-                Zeroizing::new(key),
-            )
+            let key = Zeroizing::new(crypto::rand_bytes::<32>());
+            (Kdf::None { key: STANDARD.encode(&*key) }, key)
         }
         other => return Err(format!("unknown vault mode \"{other}\"")),
     };
-    vault::write_envelope(&state.vault_path, "vault", &kdf, &key, br#"{"accounts":[]}"#)?;
+    if let Err(e) = vault::write_envelope_id(&state.vault_path, "vault", &kdf, &key, br#"{"accounts":[]}"#, Some(&vault_id)) {
+        if let Some(user) = created_entry {
+            state.keystore.delete(&user); // do not leave an orphaned key behind
+        }
+        return Err(e);
+    }
+    record_integrity(state, kdf.mode_name(), &vault_id);
     let mut guard = state.session.lock().map_err(|_| "internal error (state lock)".to_string())?;
-    *guard = Some(Session { kdf, key, accounts: Vec::new() });
+    *guard = Some(Session { vault_id, kdf, key, accounts: Vec::new() });
     state.touch();
     Ok(())
 }
@@ -321,27 +388,83 @@ pub fn setup_vault(state: State<'_, Arc<AppState>>, mode: String, password: Opti
 #[tauri::command(async)]
 pub fn unlock(state: State<'_, Arc<AppState>>, password: Option<String>) -> Cmd<()> {
     let password = secret_str(password);
+    unlock_inner(&state, password.as_ref().map(|p| p.as_str()))
+}
+
+fn unlock_inner(state: &AppState, password: Option<&str>) -> Cmd<()> {
     let env = vault::read_envelope(&state.vault_path)?;
+    if integrity_warning(state, &env).is_some() {
+        // The UI shows the warning first; this is the backstop if anything skips it.
+        return Err("the vault file changed since you last opened it — review the warning first".into());
+    }
+    let vault_id = env.vault_id.clone().unwrap_or_default();
     let key = match &env.kdf {
         Kdf::Argon2id { m, t, p, salt } => {
             let pw = password.filter(|p| !p.is_empty()).ok_or("master password required")?;
             let salt = STANDARD.decode(salt).map_err(|_| "corrupt vault header (salt)".to_string())?;
             crypto::argon2id_derive(pw.as_bytes(), &salt, *m, *t, *p)?
         }
-        Kdf::Keychain => keyring_load()?,
+        // Vaults from 1.0 have no id → shared legacy entry; newer ones have their own.
+        Kdf::Keychain => load_key(state, &keystore::key_user(&vault_id))?,
         Kdf::None { key } => {
-            let raw = STANDARD.decode(key).map_err(|_| "corrupt vault header (key)".to_string())?;
-            let arr: [u8; 32] = raw.try_into().map_err(|_| "corrupt vault header (key length)".to_string())?;
+            let raw = Zeroizing::new(STANDARD.decode(key).map_err(|_| "corrupt vault header (key)".to_string())?);
+            let arr: [u8; 32] = raw.as_slice().try_into().map_err(|_| "corrupt vault header (key length)".to_string())?;
             Zeroizing::new(arr)
         }
     };
     let plain = vault::decrypt_envelope(&env, &key)?; // AEAD tag fails on wrong password
     let payload: AccountsPayload =
         serde_json::from_slice(&plain).map_err(|_| "vault payload is corrupted".to_string())?;
-    let mut guard = state.session.lock().map_err(|_| "internal error (state lock)".to_string())?;
-    *guard = Some(Session { kdf: env.kdf, key, accounts: payload.accounts });
+    {
+        let mut guard = state.session.lock().map_err(|_| "internal error (state lock)".to_string())?;
+        *guard = Some(Session { vault_id: vault_id.clone(), kdf: env.kdf.clone(), key, accounts: payload.accounts });
+    }
     state.touch();
+    if vault_id.is_empty() {
+        upgrade_legacy_vault(state);
+    }
+    let (mode, id) = with_session(state, |s| Ok((s.kdf.mode_name().to_string(), s.vault_id.clone())))?;
+    record_integrity(state, &mode, &id);
     Ok(())
+}
+
+/// A vault made by Authio 1.0 has no id (and, in keychain mode, shares the single legacy
+/// credential entry). Give it an id; for keychain mode copy the key into the vault's OWN entry
+/// FIRST, and only then write the id into the file. The legacy entry is deliberately left in
+/// place: another instance may still depend on it. Best effort — any failure leaves the vault
+/// exactly as it was and it simply keeps working the old way.
+fn upgrade_legacy_vault(state: &AppState) {
+    let _ = with_session(state, |s| {
+        let id = new_id();
+        if matches!(s.kdf, Kdf::Keychain) {
+            store_key(state, &keystore::key_user(&id), &s.key)?;
+        }
+        s.vault_id = id.clone();
+        Ok(())
+    });
+    if persist(state).is_err() {
+        // File still has no id: forget it in memory so the next write retries the upgrade.
+        let _ = with_session(state, |s| {
+            if matches!(s.kdf, Kdf::Keychain) {
+                state.keystore.delete(&keystore::key_user(&s.vault_id));
+            }
+            s.vault_id.clear();
+            Ok(())
+        });
+    }
+}
+
+/// The user confirmed that the vault file in its current state is legitimate.
+#[tauri::command]
+pub fn trust_vault_state(state: State<'_, Arc<AppState>>) -> Cmd<()> {
+    let env = vault::read_envelope(&state.vault_path)?;
+    record_integrity(&state, env.kdf.mode_name(), &env.vault_id.clone().unwrap_or_default());
+    Ok(())
+}
+
+#[tauri::command]
+pub fn exit_app(app: tauri::AppHandle) {
+    app.exit(0);
 }
 
 #[tauri::command]
@@ -361,19 +484,37 @@ pub fn change_unlock_mode(
 ) -> Cmd<()> {
     let current_password = secret_str(current_password);
     let new_password = secret_str(new_password);
+    change_unlock_mode_inner(
+        &state,
+        &mode,
+        current_password.as_ref().map(|p| p.as_str()),
+        new_password.as_ref().map(|p| p.as_str()),
+    )
+}
+
+fn change_unlock_mode_inner(
+    state: &AppState,
+    mode: &str,
+    current_password: Option<&str>,
+    new_password: Option<&str>,
+) -> Cmd<()> {
     state.touch();
-    if vault_mode(&state)? == "password" {
-        let pw = current_password
-            .filter(|p| !p.is_empty())
-            .ok_or("enter your current master password")?;
-        if !verify_master_password(&state, &pw)? {
+    if vault_mode(state)? == "password" {
+        let pw = current_password.filter(|p| !p.is_empty()).ok_or("enter your current master password")?;
+        if !verify_master_password(state, pw)? {
             return Err("incorrect master password".into());
         }
     }
 
-    // [u8; 32] is Copy — take an owned key material snapshot for the switch.
-    let session_key: Zeroizing<[u8; 32]> = with_session(&state, |s| Ok(Zeroizing::new(*s.key)))?;
-    let (new_kdf, new_key) = match mode.as_str() {
+    let (was_keychain, old_id) = with_session(state, |s| Ok((matches!(s.kdf, Kdf::Keychain), s.vault_id.clone())))?;
+    // A vault from 1.0 gets its id here at the latest.
+    let id = if old_id.is_empty() { new_id() } else { old_id.clone() };
+    let user = keystore::key_user(&id);
+
+    // The key is ALWAYS fresh — never carried over from the previous method. Otherwise any old
+    // copy of the file (cloud, USB, backup) — which holds the key in clear for "none", or can be
+    // unlocked with the old password — would keep opening the new vault too.
+    let (new_kdf, new_key) = match mode {
         "password" => {
             let pw = new_password
                 .filter(|p| min_chars(p, 8))
@@ -385,34 +526,51 @@ pub fn change_unlock_mode(
                 key,
             )
         }
-        "keychain" => {
-            keyring_store(&session_key)?;
-            (Kdf::Keychain, session_key)
+        "keychain" => (Kdf::Keychain, Zeroizing::new(crypto::rand_bytes::<32>())),
+        "none" => {
+            let key = Zeroizing::new(crypto::rand_bytes::<32>());
+            (Kdf::None { key: STANDARD.encode(&*key) }, key)
         }
-        "none" => (Kdf::None { key: STANDARD.encode(&*session_key) }, session_key),
         other => return Err(format!("unknown unlock mode \"{other}\"")),
     };
 
-    let was_keychain = with_session(&state, |s| {
+    // Keychain: the new key must be in the store BEFORE the file that needs it is replaced; if the
+    // write then fails, put the previous entry back so the still-current vault stays openable.
+    let previous_entry = if mode == "keychain" { state.keystore.get(&user).ok() } else { None };
+    if mode == "keychain" {
+        store_key(state, &user, &new_key)?;
+    }
+    let written = with_session(state, |s| {
         let payload = Zeroizing::new(
             serde_json::to_vec(&AccountsPayloadRef { accounts: &s.accounts })
                 .map_err(|e| format!("serialize failure: {e}"))?,
         );
-        vault::write_envelope(&state.vault_path, "vault", &new_kdf, &new_key, &payload)?;
-        let was = matches!(s.kdf, Kdf::Keychain);
+        vault::write_envelope_id(&state.vault_path, "vault", &new_kdf, &new_key, &payload, Some(&id))?;
         s.kdf = new_kdf.clone();
         s.key = new_key;
-        Ok(was)
-    })?;
-    // The .bak still holds the vault under the PREVIOUS unlock method (for
-    // "no security" that is readable by anyone) — drop it; the next write
-    // recreates it under the new method.
-    vault::discard_backup(&state.vault_path);
-    if was_keychain && mode != "keychain" {
-        if let Ok(entry) = keyring::Entry::new("Authio", "vault-key") {
-            let _ = entry.delete_credential();
+        s.vault_id = id.clone();
+        Ok(())
+    });
+    if let Err(e) = written {
+        if mode == "keychain" {
+            match previous_entry {
+                Some(v) => {
+                    let _ = state.keystore.set(&user, &v);
+                }
+                None => state.keystore.delete(&user),
+            }
         }
+        return Err(e);
     }
+    // The .bak still holds the vault under the PREVIOUS unlock method (for "no security" that is
+    // readable by anyone) — drop it; the next write recreates it under the new method.
+    vault::discard_backup(&state.vault_path);
+    // Leaving keychain mode: remove this vault's own entry. The shared legacy entry is never
+    // deleted — another instance may still rely on it.
+    if was_keychain && mode != "keychain" && !old_id.is_empty() {
+        state.keystore.delete(&keystore::key_user(&old_id));
+    }
+    record_integrity(state, mode, &id);
     Ok(())
 }
 
@@ -874,4 +1032,277 @@ pub fn set_settings(app: tauri::AppHandle, state: State<'_, Arc<AppState>>, mut 
 #[tauri::command]
 pub fn user_activity(state: State<'_, Arc<AppState>>) {
     state.touch();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::keystore::mem::MemKeyStore;
+    use crate::keystore::KeyStore;
+    use std::path::PathBuf;
+
+    fn dir(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("authio-cmd-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    fn app(tag: &str, ks: &Arc<MemKeyStore>) -> AppState {
+        AppState::with_keystore(dir(tag), ks.clone())
+    }
+
+    fn lock(state: &AppState) {
+        *state.session.lock().unwrap() = None;
+    }
+
+    fn add_account(state: &AppState, issuer: &str) {
+        let d = otpauth::parse_otpauth(&format!("otpauth://totp/{issuer}:me?secret=JBSWY3DPEHPK3PXP&issuer={issuer}")).ok().unwrap();
+        with_session(state, |s| {
+            s.accounts.push(d.into_account(new_id(), 1, 0));
+            Ok(())
+        })
+        .unwrap();
+        persist(state).unwrap();
+    }
+
+    fn accounts(state: &AppState) -> Vec<String> {
+        with_session(state, |s| Ok(s.accounts.iter().map(|a| a.issuer.clone()).collect())).unwrap()
+    }
+
+    fn header_key(state: &AppState) -> Option<[u8; 32]> {
+        match vault::read_envelope(&state.vault_path).unwrap().kdf {
+            Kdf::None { key } => Some(STANDARD.decode(key).unwrap().try_into().unwrap()),
+            _ => None,
+        }
+    }
+
+    fn entry_keys(ks: &MemKeyStore) -> Vec<String> {
+        let mut v: Vec<String> = ks.map.lock().unwrap().keys().filter(|k| k.starts_with("vault-key")).cloned().collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn two_keychain_vaults_do_not_overwrite_each_others_key() {
+        let ks = Arc::new(MemKeyStore::default());
+        let a = app("two-a", &ks); // e.g. the installed copy
+        let b = app("two-b", &ks); // e.g. a portable copy, same Windows user
+        setup_vault_inner(&a, "keychain", None).unwrap();
+        add_account(&a, "InA");
+        setup_vault_inner(&b, "keychain", None).unwrap();
+        add_account(&b, "InB");
+        assert_eq!(entry_keys(&ks).len(), 2, "one credential entry per vault");
+        assert!(!entry_keys(&ks).contains(&"vault-key".to_string()), "no shared entry any more");
+        lock(&a);
+        lock(&b);
+        unlock_inner(&a, None).unwrap();
+        unlock_inner(&b, None).unwrap();
+        assert_eq!(accounts(&a), vec!["InA"]);
+        assert_eq!(accounts(&b), vec!["InB"]);
+    }
+
+    #[test]
+    fn failed_setup_leaves_no_orphaned_key() {
+        let ks = Arc::new(MemKeyStore::default());
+        let a = app("orphan", &ks);
+        std::fs::create_dir_all(a.vault_path.with_extension("tmp")).unwrap(); // makes the write fail
+        assert!(setup_vault_inner(&a, "keychain", None).is_err());
+        assert!(entry_keys(&ks).is_empty());
+        assert!(!a.vault_path.exists());
+    }
+
+    /// A vault exactly as Authio 1.0 wrote it: no id, key in the single shared entry.
+    fn legacy_keychain_vault(tag: &str, ks: &Arc<MemKeyStore>) -> (AppState, [u8; 32]) {
+        let a = app(tag, ks);
+        let key = crypto::rand_bytes::<32>();
+        ks.set(keystore::LEGACY_KEY_USER, &STANDARD.encode(key)).unwrap();
+        let payload = br#"{"accounts":[]}"#;
+        vault::write_envelope(&a.vault_path, "vault", &Kdf::Keychain, &key, payload).unwrap();
+        (a, key)
+    }
+
+    #[test]
+    fn vault_from_1_0_is_migrated_and_keeps_working() {
+        let ks = Arc::new(MemKeyStore::default());
+        let (a, key) = legacy_keychain_vault("legacy", &ks);
+        unlock_inner(&a, None).unwrap();
+        let env = vault::read_envelope(&a.vault_path).unwrap();
+        let id = env.vault_id.clone().expect("vault got an id");
+        // key copied to the vault's own entry; legacy entry untouched
+        assert_eq!(ks.get(&keystore::key_user(&id)).unwrap(), STANDARD.encode(key));
+        assert_eq!(ks.get(keystore::LEGACY_KEY_USER).unwrap(), STANDARD.encode(key));
+        // and it no longer depends on the legacy entry
+        ks.delete(keystore::LEGACY_KEY_USER);
+        lock(&a);
+        unlock_inner(&a, None).unwrap();
+    }
+
+    #[test]
+    fn failed_migration_never_breaks_the_vault() {
+        let ks = Arc::new(MemKeyStore::default());
+        let (a, _key) = legacy_keychain_vault("legacy-fail", &ks);
+        *ks.fail_sets.lock().unwrap() = true;
+        unlock_inner(&a, None).unwrap(); // upgrade fails silently
+        assert!(vault::read_envelope(&a.vault_path).unwrap().vault_id.is_none());
+        lock(&a);
+        unlock_inner(&a, None).unwrap(); // still opens through the legacy entry
+        *ks.fail_sets.lock().unwrap() = false;
+        lock(&a);
+        unlock_inner(&a, None).unwrap();
+        // the next successful unlock completes the upgrade
+        assert!(vault::read_envelope(&a.vault_path).unwrap().vault_id.is_some());
+    }
+
+    #[test]
+    fn switching_to_a_legacy_vaults_keychain_leaves_the_shared_entry_alone() {
+        let ks = Arc::new(MemKeyStore::default());
+        let (a, key) = legacy_keychain_vault("legacy-leave", &ks);
+        unlock_inner(&a, None).unwrap();
+        change_unlock_mode_inner(&a, "none", None, None).unwrap();
+        // another instance may still use it
+        assert_eq!(ks.get(keystore::LEGACY_KEY_USER).unwrap(), STANDARD.encode(key));
+        assert_eq!(entry_keys(&ks), vec!["vault-key".to_string()]);
+    }
+
+    #[test]
+    fn none_to_keychain_rotates_the_key_and_keeps_accounts() {
+        let ks = Arc::new(MemKeyStore::default());
+        let a = app("rot-none", &ks);
+        setup_vault_inner(&a, "none", None).unwrap();
+        add_account(&a, "Kept");
+        let old_key = header_key(&a).unwrap();
+        let old_copy = std::fs::read(&a.vault_path).unwrap(); // e.g. a copy synced to a cloud drive
+        change_unlock_mode_inner(&a, "keychain", None, None).unwrap();
+        let env = vault::read_envelope(&a.vault_path).unwrap();
+        let new_key = load_key(&a, &keystore::key_user(env.vault_id.as_deref().unwrap())).unwrap();
+        assert_ne!(*new_key, old_key, "key must be fresh");
+        assert!(vault::decrypt_envelope(&env, &old_key).is_err(), "old key must not open the new vault");
+        // the old copy still opens (it always will) — but it holds nothing newer
+        let old_env: vault::Envelope = serde_json::from_slice(&old_copy).unwrap();
+        assert!(vault::decrypt_envelope(&old_env, &old_key).is_ok());
+        lock(&a);
+        unlock_inner(&a, None).unwrap();
+        assert_eq!(accounts(&a), vec!["Kept"]);
+    }
+
+    #[test]
+    fn keychain_to_none_and_keychain_to_keychain_also_rotate() {
+        let ks = Arc::new(MemKeyStore::default());
+        let a = app("rot-kc", &ks);
+        setup_vault_inner(&a, "keychain", None).unwrap();
+        add_account(&a, "K");
+        let id = vault::read_envelope(&a.vault_path).unwrap().vault_id.unwrap();
+        let k1 = ks.get(&keystore::key_user(&id)).unwrap();
+        change_unlock_mode_inner(&a, "keychain", None, None).unwrap();
+        let k2 = ks.get(&keystore::key_user(&id)).unwrap();
+        assert_ne!(k1, k2);
+        change_unlock_mode_inner(&a, "none", None, None).unwrap();
+        let k3 = STANDARD.encode(header_key(&a).unwrap());
+        assert_ne!(k2, k3);
+        assert!(entry_keys(&ks).is_empty(), "own entry removed when leaving keychain mode");
+        lock(&a);
+        unlock_inner(&a, None).unwrap();
+        assert_eq!(accounts(&a), vec!["K"]);
+    }
+
+    #[test]
+    fn password_to_keychain_does_not_reuse_the_password_derived_key() {
+        let ks = Arc::new(MemKeyStore::default());
+        let a = app("rot-pw", &ks);
+        setup_vault_inner(&a, "password", Some("correct horse battery")).unwrap();
+        add_account(&a, "P");
+        let old_env = vault::read_envelope(&a.vault_path).unwrap();
+        let Kdf::Argon2id { m, t, p, salt } = old_env.kdf.clone() else { panic!() };
+        let pw_key = crypto::argon2id_derive(b"correct horse battery", &STANDARD.decode(salt).unwrap(), m, t, p).unwrap();
+        change_unlock_mode_inner(&a, "keychain", Some("correct horse battery"), None).unwrap();
+        let env = vault::read_envelope(&a.vault_path).unwrap();
+        assert!(vault::decrypt_envelope(&env, &pw_key).is_err(), "someone holding the old password must not open the new vault");
+        lock(&a);
+        unlock_inner(&a, None).unwrap();
+        assert_eq!(accounts(&a), vec!["P"]);
+    }
+
+    #[test]
+    fn failed_mode_change_restores_the_previous_keychain_entry() {
+        let ks = Arc::new(MemKeyStore::default());
+        let a = app("rollback", &ks);
+        setup_vault_inner(&a, "keychain", None).unwrap();
+        add_account(&a, "Safe");
+        let id = vault::read_envelope(&a.vault_path).unwrap().vault_id.unwrap();
+        let before = ks.get(&keystore::key_user(&id)).unwrap();
+        std::fs::create_dir_all(a.vault_path.with_extension("tmp")).unwrap(); // make the write fail
+        assert!(change_unlock_mode_inner(&a, "keychain", None, None).is_err());
+        assert_eq!(ks.get(&keystore::key_user(&id)).unwrap(), before, "old key put back");
+        std::fs::remove_dir_all(a.vault_path.with_extension("tmp")).unwrap();
+        lock(&a);
+        unlock_inner(&a, None).unwrap();
+        assert_eq!(accounts(&a), vec!["Safe"]);
+    }
+
+    #[test]
+    fn failed_none_to_keychain_leaves_no_orphan_entry() {
+        let ks = Arc::new(MemKeyStore::default());
+        let a = app("rollback2", &ks);
+        setup_vault_inner(&a, "none", None).unwrap();
+        std::fs::create_dir_all(a.vault_path.with_extension("tmp")).unwrap();
+        assert!(change_unlock_mode_inner(&a, "keychain", None, None).is_err());
+        assert!(entry_keys(&ks).is_empty());
+    }
+
+    #[test]
+    fn replacing_the_vault_file_is_detected_before_unlocking() {
+        let ks = Arc::new(MemKeyStore::default());
+        let a = app("integrity", &ks);
+        setup_vault_inner(&a, "keychain", None).unwrap();
+        lock(&a);
+        // healthy: no warning
+        let env = vault::read_envelope(&a.vault_path).unwrap();
+        assert!(integrity_warning(&a, &env).is_none());
+        // attacker swaps in a "no security" vault of their own
+        let evil_key = crypto::rand_bytes::<32>();
+        vault::write_envelope_id(
+            &a.vault_path,
+            "vault",
+            &Kdf::None { key: STANDARD.encode(evil_key) },
+            &evil_key,
+            br#"{"accounts":[]}"#,
+            Some("evil"),
+        )
+        .unwrap();
+        let env = vault::read_envelope(&a.vault_path).unwrap();
+        let w = integrity_warning(&a, &env).expect("warning");
+        assert_eq!((w.kind.as_str(), w.was_mode.as_str(), w.now_mode.as_str()), ("mode_changed", "keychain", "none"));
+        assert!(unlock_inner(&a, None).is_err(), "must not open silently");
+        // the user explicitly trusts it → recorded, unlock proceeds
+        let env = vault::read_envelope(&a.vault_path).unwrap();
+        record_integrity(&a, env.kdf.mode_name(), env.vault_id.as_deref().unwrap_or(""));
+        unlock_inner(&a, None).unwrap();
+    }
+
+    #[test]
+    fn same_mode_but_different_vault_is_reported_as_replaced() {
+        let ks = Arc::new(MemKeyStore::default());
+        let a = app("integrity2", &ks);
+        setup_vault_inner(&a, "none", None).unwrap();
+        lock(&a);
+        let k = crypto::rand_bytes::<32>();
+        vault::write_envelope_id(&a.vault_path, "vault", &Kdf::None { key: STANDARD.encode(k) }, &k, br#"{"accounts":[]}"#, Some("other-id")).unwrap();
+        let env = vault::read_envelope(&a.vault_path).unwrap();
+        assert_eq!(integrity_warning(&a, &env).unwrap().kind, "vault_replaced");
+    }
+
+    #[test]
+    fn no_record_means_no_warning_and_in_app_mode_changes_are_not_flagged() {
+        let ks = Arc::new(MemKeyStore::default());
+        let (a, _k) = legacy_keychain_vault("tofu", &ks); // upgrade from 1.0: nothing recorded yet
+        let env = vault::read_envelope(&a.vault_path).unwrap();
+        assert!(integrity_warning(&a, &env).is_none());
+        unlock_inner(&a, None).unwrap();
+        change_unlock_mode_inner(&a, "none", None, None).unwrap();
+        lock(&a);
+        let env = vault::read_envelope(&a.vault_path).unwrap();
+        assert!(integrity_warning(&a, &env).is_none(), "a change made inside the app is expected");
+        unlock_inner(&a, None).unwrap();
+    }
 }

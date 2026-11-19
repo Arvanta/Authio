@@ -37,6 +37,28 @@ The **keychain mode** stores a random 256-bit vault key in the OS credential man
 vault file against theft, but not against an attacker seated at an unlocked session —
 the master-password mode is the recommendation for high-value secrets.
 
+**Key management (since 1.1.0)**
+- Every vault has a random id in its header; keychain mode stores its key in an entry named
+  after that id (`vault-key-<id>`), so several vaults (installed + portable copies, re-installs)
+  never overwrite one another's key. Vaults from 1.0 used one shared entry: they are given an id
+  on first unlock (key copied first, then the id written; the shared entry is left in place; any
+  failure leaves the vault working as before). If saving the vault fails, the previous keychain
+  entry is restored, and no orphaned entry is left behind.
+- **The encryption key is always fresh when the unlock method changes** (and the vault is
+  re-encrypted) — it is never carried over from the old method. Without this, a stale copy of the
+  file (cloud, USB, backup; for "no security" the key sits inside it in clear) would keep opening
+  the new vault too. It does **not** protect data already in such copies: if an old copy or old
+  password was exposed, treat the existing accounts as exposed and re-issue their secrets.
+- **Vault-swap warning:** the last-seen unlock method and vault id are recorded in the OS
+  credential store. If the vault file's method or identity differs from that record when Authio
+  starts (changed outside the app), the user must confirm before anything is unlocked or added;
+  the backend also refuses to unlock until then. Changes made inside the app never trigger it,
+  and with no record yet (first run / upgrade) nothing is raised (trust on first use).
+- Known limitation: the vault header (kdf, kind, version, id) is not yet bound into the AEAD as
+  associated data. Header tampering that matters already fails (the KDF parameters and key feed
+  the decryption), and full file replacement is what the warning above detects; binding the header
+  needs a file-format version bump and is planned for a later release.
+
 ## Memory & process hardening
 
 - `Zeroizing` containers for the master key, derived keys, per-account secret bytes, the decrypted/serialised vault payload buffers, and password strings received over IPC. This is **best effort**: transient copies made by the JSON parser, the WebView/IPC layer or the OS (swap, crash dumps) are outside the app's control.
@@ -61,6 +83,7 @@ the master-password mode is the recommendation for high-value secrets.
 - ✅ Vault file theft (password mode), casual snooping (keychain mode), shoulder
   surfing (hidden codes + capture protection), tampered backups (AEAD), corrupt
   imports (validation + explicit confirmation), accidental wipe (atomic writes + .bak).
+- ✅ A vault file swapped for another one while Authio was closed (warned before unlocking, see above).
 - ⚠️ Not defended: a fully compromised OS (malware reading the unlocked process
   memory or the OS credential store), physical DMA attacks, weak master passwords.
   These are out of scope for a desktop TOTP app.

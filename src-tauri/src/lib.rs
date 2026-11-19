@@ -4,6 +4,7 @@
 mod commands;
 mod crypto;
 mod importers;
+mod keystore;
 mod migration;
 mod model;
 mod otp;
@@ -193,6 +194,8 @@ pub fn run() {
             commands::import_text,
             commands::import_file,
             commands::import_qr_files,
+            commands::trust_vault_state,
+            commands::exit_app,
             commands::import_apply,
             commands::get_settings,
             commands::set_settings,

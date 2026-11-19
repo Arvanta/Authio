@@ -204,7 +204,7 @@
     "newmode": "New method",
     "mismatch": "Passwords do not match",
     "submit": "Apply",
-    "done": "Unlock method updated",
+    "done": "Unlock method updated. A new encryption key was created; copies of the vault file made earlier still open with the old key or password.",
     "new_password": "New master password (min. 8)",
     "new_password2": "Repeat new master password",
     "none.warn": "Warning: anyone with access to this device will be able to read all your secrets, and screenshots/exports are unprotected."
@@ -230,5 +230,17 @@
     "imported": "{n} account(s) imported",
     "deleted": "Account deleted",
     "updated": "Account updated"
+  },
+  "integrity": {
+    "title": "Vault file changed",
+    "mode_changed": "The unlock method of this vault file changed from “{was}” to “{now}” since Authio last opened it — and not through Authio. If you did not do this yourself, the file may have been replaced: do not add accounts to it.",
+    "vault_replaced": "This file is a different vault than the one Authio last opened (same unlock method, different identity). If you did not replace or restore it yourself, do not use it.",
+    "trust": "I made this change — continue",
+    "exit": "Close Authio",
+    "mode": {
+      "password": "master password",
+      "keychain": "Windows keychain",
+      "none": "no security"
+    }
   }
 }

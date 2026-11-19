@@ -204,7 +204,7 @@
     "newmode": "Novo método",
     "mismatch": "As palavras-passe não coincidem",
     "submit": "Aplicar",
-    "done": "Método de desbloqueio atualizado",
+    "done": "Método de desbloqueio atualizado. Foi criada uma nova chave de cifragem; as cópias do ficheiro do cofre feitas antes continuam a abrir com a chave ou palavra-passe antiga.",
     "new_password": "Nova palavra-passe mestra (mín. 8)",
     "new_password2": "Repetir a nova palavra-passe",
     "none.warn": "Atenção: qualquer pessoa com acesso a este dispositivo poderá ler todos os seus segredos; capturas e exportações ficam desprotegidas."
@@ -230,5 +230,17 @@
     "imported": "{n} conta(s) importada(s)",
     "deleted": "Conta eliminada",
     "updated": "Conta atualizada"
+  },
+  "integrity": {
+    "title": "Ficheiro do cofre alterado",
+    "mode_changed": "O método de desbloqueio deste ficheiro de cofre mudou de «{was}» para «{now}» desde a última vez que o Authio o abriu — e não foi através do Authio. Se não foi você, o ficheiro pode ter sido substituído: não adicione contas.",
+    "vault_replaced": "Este ficheiro é um cofre diferente do que o Authio abriu da última vez (mesmo método, identidade diferente). Se não o substituiu ou restaurou você mesmo, não o utilize.",
+    "trust": "Fui eu que fiz esta alteração — continuar",
+    "exit": "Fechar o Authio",
+    "mode": {
+      "password": "palavra-passe mestra",
+      "keychain": "cofre de chaves do Windows",
+      "none": "sem segurança"
+    }
   }
 }

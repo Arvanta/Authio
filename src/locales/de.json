@@ -204,7 +204,7 @@
     "newmode": "Neue Methode",
     "mismatch": "Passwörter stimmen nicht überein",
     "submit": "Anwenden",
-    "done": "Entsperrmethode aktualisiert",
+    "done": "Entsperrmethode aktualisiert. Ein neuer Schlüssel wurde erzeugt; früher erstellte Kopien der Tresordatei lassen sich weiterhin mit dem alten Schlüssel oder Passwort öffnen.",
     "new_password": "Neues Master-Passwort (min. 8)",
     "new_password2": "Neues Master-Passwort wiederholen",
     "none.warn": "Warnung: Jeder mit Zugriff auf dieses Gerät kann alle Geheimnisse lesen; Screenshots und Exporte sind ungeschützt."
@@ -230,5 +230,17 @@
     "imported": "{n} Konto(-en) importiert",
     "deleted": "Konto gelöscht",
     "updated": "Konto aktualisiert"
+  },
+  "integrity": {
+    "title": "Tresordatei geändert",
+    "mode_changed": "Die Entsperrmethode dieser Tresordatei wurde von „{was}“ auf „{now}“ geändert, seit Authio sie zuletzt geöffnet hat – und nicht über Authio. Falls Sie das nicht selbst getan haben, wurde die Datei möglicherweise ausgetauscht: Fügen Sie keine Konten hinzu.",
+    "vault_replaced": "Diese Datei ist ein anderer Tresor als der, den Authio zuletzt geöffnet hat (gleiche Entsperrmethode, andere Identität). Wenn Sie sie nicht selbst ersetzt oder wiederhergestellt haben, verwenden Sie sie nicht.",
+    "trust": "Die Änderung stammt von mir – fortfahren",
+    "exit": "Authio schließen",
+    "mode": {
+      "password": "Master-Passwort",
+      "keychain": "Windows-Schlüsselbund",
+      "none": "kein Schutz"
+    }
   }
 }

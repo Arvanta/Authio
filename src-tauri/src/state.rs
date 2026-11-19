@@ -2,15 +2,18 @@
 //! on lock. Nothing secret crosses to the UI — only codes and metadata.
 
 use crate::model::{Account, Draft, Settings};
+use crate::keystore::{KeyStore, OsKeyStore};
 use crate::vault::Kdf;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use zeroize::Zeroizing;
 
 /// An open vault session. Dropping it zeroizes the master key (via `Zeroizing`)
 /// and every account secret (owned `Zeroizing<Vec<u8>>` fields).
 pub struct Session {
+    /// "" = vault from Authio 1.0 that has no id yet (it is given one on first unlock).
+    pub vault_id: String,
     pub kdf: Kdf,
     pub key: Zeroizing<[u8; 32]>,
     pub accounts: Vec<Account>,
@@ -31,10 +34,16 @@ pub struct AppState {
     pub last_geo_save: Mutex<Instant>,
     /// Set when startup self-heal restored the vault from `tmp`/`bak`.
     pub recovered_from: Option<&'static str>,
+    /// OS credential store (keychain-mode keys, last-seen-vault record).
+    pub keystore: Arc<dyn KeyStore>,
 }
 
 impl AppState {
     pub fn new(dir: PathBuf) -> Self {
+        Self::with_keystore(dir, Arc::new(OsKeyStore))
+    }
+
+    pub fn with_keystore(dir: PathBuf, keystore: Arc<dyn KeyStore>) -> Self {
         let _ = std::fs::create_dir_all(&dir);
         // Self-heal an interrupted/damaged vault write BEFORE anything asks
         // whether a vault exists (a missing vault.json would offer "set up new").
@@ -53,6 +62,7 @@ impl AppState {
             last_activity: Mutex::new(Instant::now()),
             last_geo_save: Mutex::new(Instant::now() - std::time::Duration::from_secs(60)),
             recovered_from,
+            keystore,
         }
     }
 
