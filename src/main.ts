@@ -646,7 +646,7 @@ function accountCard(a: AccountDto): HTMLElement {
 
   code.onclick = async () => {
     if (isHotp) {
-      await doHotp(a);
+      await hotpClick(a);
       return;
     }
     if (hidden.has(a.id)) {
@@ -764,7 +764,7 @@ function tileCard(a: AccountDto): HTMLElement {
 
   code.onclick = async () => {
     if (isHotp) {
-      await doHotp(a);
+      await hotpClick(a);
       return;
     }
     if (hidden.has(a.id)) {
@@ -794,13 +794,32 @@ function tileCard(a: AccountDto): HTMLElement {
   return card;
 }
 
+const hotpBusy = new Set<string>();
+
+/** Every generated HOTP code uses up one counter value on the server side, so a click must never
+ *  advance the counter by accident: while a code is already on screen a click COPIES it, and a
+ *  request that is still running swallows repeated clicks. */
+async function hotpClick(a: AccountDto) {
+  if (hotpBusy.has(a.id)) return;
+  const shown = lastHotp.get(a.id);
+  if (shown && shown.until > Date.now()) {
+    await copyText(shown.code);
+    return;
+  }
+  await doHotp(a);
+}
+
 async function doHotp(a: AccountDto) {
+  if (hotpBusy.has(a.id)) return;
+  hotpBusy.add(a.id);
   try {
     const dto = await api.hotpNext(a.id);
     if (dto.code) lastHotp.set(a.id, { code: dto.code, until: Date.now() + 30000 });
     void pollCodes();
   } catch (e) {
     toast(fmtError(e), true);
+  } finally {
+    hotpBusy.delete(a.id);
   }
 }
 
@@ -822,6 +841,7 @@ function applyCodes(codes: CodeDto[]) {
       if (hp && hp.until > Date.now()) {
         ref.code.textContent = grouped(hp.code);
         ref.code.classList.remove("hidden-code");
+        ref.code.title = t("code.copy");
       } else {
         ref.code.textContent = "•••";
         ref.code.title = t("code.next");

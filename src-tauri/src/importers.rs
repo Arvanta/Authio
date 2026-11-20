@@ -372,27 +372,28 @@ fn parse_aegis_db(db_val: serde_json::Value, format: &str) -> Result<ImportOutco
     let mut drafts = Vec::new();
     let mut skipped = 0;
     for e in db.entries {
-        let kind = match e.typ.as_str() {
-            "totp" | "hotp" => e.typ.as_str(),
-            _ => {
-                skipped += 1; // e.g. steam/motp entries are specialized formats
+        let tt = match token_type(Some(e.typ.as_str())) {
+            Ok(t) => t,
+            Err(_) => {
+                skipped += 1; // motp / yandex / unknown: cannot be generated correctly here
                 continue;
             }
         };
         let res: Result<Draft, String> = (|| {
+            let (flavor, digits, period, steam_algo) = steam_or(tt, e.info.digits.unwrap_or(6), e.info.period.unwrap_or(30));
             let d = Draft {
                 issuer: e.issuer.clone().unwrap_or_default().trim().to_string(),
                 name: e.name.trim().to_string(),
                 secret: Zeroizing::new(b32_decode(&e.info.secret)?),
-                algorithm: Algorithm::from_opt(e.info.algo.as_deref())?,
-                digits: e.info.digits.unwrap_or(6),
-                period: e.info.period.unwrap_or(30),
-                kind: if kind == "hotp" {
+                algorithm: if tt == TokenType::Steam { steam_algo } else { Algorithm::from_opt(e.info.algo.as_deref())? },
+                digits,
+                period,
+                kind: if tt == TokenType::Hotp {
                     Kind::Hotp { counter: e.info.counter.unwrap_or(0) }
                 } else {
                     Kind::Totp
                 },
-                flavor: Flavor::Standard,
+                flavor,
                 group: String::new(),
             };
             d.validate()?;
@@ -453,6 +454,34 @@ fn import_authme_entries(arr: &[serde_json::Value]) -> Result<ImportOutcome, Str
     Ok(ImportOutcome::ok("authme", drafts, skipped))
 }
 
+/// What an importer's "type" field means. Anything this app cannot generate correctly (mOTP, Yandex,
+/// unknown future types ...) must be SKIPPED — importing it as plain TOTP would store an account
+/// that never shows a valid code. A missing / blank type is the common case: TOTP.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum TokenType {
+    Totp,
+    Hotp,
+    Steam,
+}
+
+fn token_type(t: Option<&str>) -> Result<TokenType, String> {
+    match t.map(|t| t.trim().to_ascii_lowercase()).as_deref() {
+        None | Some("") | Some("totp") => Ok(TokenType::Totp),
+        Some("hotp") => Ok(TokenType::Hotp),
+        Some("steam") => Ok(TokenType::Steam),
+        Some(other) => Err(format!("unsupported token type '{other}'")),
+    }
+}
+
+/// Fixed Steam Guard parameters (the generator ignores whatever the file says).
+fn steam_or(t: TokenType, digits: u32, period: u32) -> (Flavor, u32, u32, Algorithm) {
+    if t == TokenType::Steam {
+        (Flavor::Steam, 5, 30, Algorithm::SHA1)
+    } else {
+        (Flavor::Standard, digits, period, Algorithm::SHA1)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // 2FAS (https://2fas.com) — plain backup JSON (encrypted exports are rejected
 // earlier with a dedicated message)
@@ -473,16 +502,17 @@ fn import_2fas(v: &serde_json::Value) -> Result<ImportOutcome, String> {
                 otp.get(k).and_then(|x| x.as_u64()).map(|x| x as u32).unwrap_or(d)
             };
             let svc_name = svc.get("name").and_then(|s| s.as_str()).unwrap_or("").trim().to_string();
-            let is_hotp = otp_str("tokenType").map(|t| t.eq_ignore_ascii_case("hotp")).unwrap_or(false);
+            let tt = token_type(otp_str("tokenType").as_deref())?;
+            let (flavor, digits, period, steam_algo) = steam_or(tt, otp_num("digits", 6), otp_num("period", 30));
             let d = Draft {
                 issuer: otp_str("issuer").filter(|i| !i.trim().is_empty()).unwrap_or_else(|| svc_name.clone()),
                 name: otp_str("account").filter(|a| !a.trim().is_empty()).unwrap_or(svc_name),
                 secret: Zeroizing::new(b32_decode(secret)?),
-                algorithm: Algorithm::from_opt(otp_str("algorithm").as_deref())?,
-                digits: otp_num("digits", 6),
-                period: otp_num("period", 30),
-                kind: if is_hotp { Kind::Hotp { counter: otp.get("counter").and_then(|c| c.as_u64()).unwrap_or(0) } } else { Kind::Totp },
-                flavor: Flavor::Standard,
+                algorithm: if tt == TokenType::Steam { steam_algo } else { Algorithm::from_opt(otp_str("algorithm").as_deref())? },
+                digits,
+                period,
+                kind: if tt == TokenType::Hotp { Kind::Hotp { counter: otp.get("counter").and_then(|c| c.as_u64()).unwrap_or(0) } } else { Kind::Totp },
+                flavor,
                 group: String::new(),
             };
             d.validate()?;
@@ -510,16 +540,17 @@ fn import_andotp(arr: &[serde_json::Value]) -> Result<ImportOutcome, String> {
         let res: Result<Draft, String> = (|| {
             let strf = |k: &str| e.get(k).and_then(|x| x.as_str()).map(|s| s.to_string());
             let num = |k: &str, d: u32| e.get(k).and_then(|x| x.as_u64()).map(|x| x as u32).unwrap_or(d);
-            let is_hotp = strf("type").map(|t| t.eq_ignore_ascii_case("hotp")).unwrap_or(false);
+            let tt = token_type(strf("type").as_deref())?; // MOTP / unknown types are skipped
+            let (flavor, digits, period, steam_algo) = steam_or(tt, num("digits", 6), num("period", 30));
             let d = Draft {
                 issuer: strf("issuer").unwrap_or_default().trim().to_string(),
                 name: strf("label").unwrap_or_default().trim().to_string(),
                 secret: Zeroizing::new(b32_decode(&strf("secret").ok_or("missing secret")?)?),
-                algorithm: Algorithm::from_opt(strf("algorithm").as_deref())?,
-                digits: num("digits", 6),
-                period: num("period", 30),
-                kind: if is_hotp { Kind::Hotp { counter: e.get("counter").and_then(|c| c.as_u64()).unwrap_or(0) } } else { Kind::Totp },
-                flavor: Flavor::Standard,
+                algorithm: if tt == TokenType::Steam { steam_algo } else { Algorithm::from_opt(strf("algorithm").as_deref())? },
+                digits,
+                period,
+                kind: if tt == TokenType::Hotp { Kind::Hotp { counter: e.get("counter").and_then(|c| c.as_u64()).unwrap_or(0) } } else { Kind::Totp },
+                flavor,
                 group: String::new(),
             };
             d.validate()?;
@@ -554,16 +585,17 @@ fn import_raivo(arr: &[serde_json::Value]) -> Result<ImportOutcome, String> {
     for e in arr {
         let res: Result<Draft, String> = (|| {
             let strf = |k: &str| e.get(k).and_then(|x| x.as_str()).map(|s| s.to_string());
-            let is_hotp = strf("kind").map(|t| t.eq_ignore_ascii_case("hotp")).unwrap_or(false);
+            let tt = token_type(strf("kind").as_deref())?;
+            let (flavor, digits, period, steam_algo) = steam_or(tt, num(e, "digits", 6) as u32, num(e, "timer", 30) as u32);
             let d = Draft {
                 issuer: strf("issuer").unwrap_or_default().trim().to_string(),
                 name: strf("account").unwrap_or_default().trim().to_string(),
                 secret: Zeroizing::new(b32_decode(&strf("secret").ok_or("missing secret")?)?),
-                algorithm: Algorithm::from_opt(strf("algorithm").as_deref())?,
-                digits: num(e, "digits", 6) as u32,
-                period: num(e, "timer", 30) as u32,
-                kind: if is_hotp { Kind::Hotp { counter: num(e, "counter", 0) } } else { Kind::Totp },
-                flavor: Flavor::Standard,
+                algorithm: if tt == TokenType::Steam { steam_algo } else { Algorithm::from_opt(strf("algorithm").as_deref())? },
+                digits,
+                period,
+                kind: if tt == TokenType::Hotp { Kind::Hotp { counter: num(e, "counter", 0) } } else { Kind::Totp },
+                flavor,
                 group: String::new(),
             };
             d.validate()?;
@@ -909,8 +941,9 @@ mod tests {
         }"#;
         let out = parse_text(json, None).unwrap();
         assert_eq!(out.format, "aegis-plain");
-        assert_eq!(out.drafts.len(), 1);
-        assert_eq!(out.skipped, 1);
+        assert_eq!(out.drafts.len(), 2);
+        assert_eq!(out.drafts[1].flavor, Flavor::Steam, "Aegis steam entries keep generating Steam codes");
+        assert_eq!(out.skipped, 0);
     }
 
     #[test]
@@ -1015,5 +1048,37 @@ mod tests {
         let o = parse_text(j, None).unwrap();
         assert_eq!(o.drafts.len(), 2);
         assert!(o.drafts.iter().all(|d| d.algorithm == Algorithm::SHA1));
+    }
+
+    #[test]
+    fn steam_and_unsupported_types_are_not_imported_as_plain_totp() {
+        // 2FAS: STEAM -> Steam flavor (5 chars, A-Z/digits), unknown tokenType skipped
+        let j = r#"{"services":[
+          {"name":"Steam","secret":"JBSWY3DPEHPK3PXP","otp":{"account":"gaben","issuer":"Steam","digits":5,"period":30,"algorithm":"SHA1","tokenType":"STEAM"}},
+          {"name":"Weird","secret":"JBSWY3DPEHPK3PXP","otp":{"account":"x","tokenType":"FUTURE"}},
+          {"name":"Plain","secret":"JBSWY3DPEHPK3PXQ","otp":{"account":"y","tokenType":"TOTP"}}],"schemaVersion":4}"#;
+        let out = parse_text(j, None).unwrap();
+        assert_eq!(out.drafts.len(), 2);
+        assert_eq!(out.skipped, 1);
+        assert_eq!(out.drafts[0].flavor, Flavor::Steam);
+        assert_eq!(out.drafts[1].flavor, Flavor::Standard);
+
+        // andOTP: STEAM -> Steam, MOTP skipped, HOTP kept as HOTP
+        let j = r#"[
+          {"secret":"JBSWY3DPEHPK3PXP","issuer":"Steam","label":"a","type":"STEAM","digits":5,"period":30,"algorithm":"SHA1"},
+          {"secret":"JBSWY3DPEHPK3PXQ","issuer":"M","label":"b","type":"MOTP","digits":6,"period":10,"algorithm":"MD5"},
+          {"secret":"JBSWY3DPEHPK3PXR","issuer":"H","label":"c","type":"HOTP","digits":6,"counter":4,"algorithm":"SHA1"}]"#;
+        let out = parse_text(j, None).unwrap();
+        assert_eq!(out.drafts.len(), 2);
+        assert_eq!(out.skipped, 1);
+        assert_eq!(out.drafts[0].flavor, Flavor::Steam);
+        assert!(out.drafts[1].kind.is_hotp());
+
+        // Raivo: unknown kind skipped
+        let j = r#"[{"kind":"MOTP","account":"a","secret":"JBSWY3DPEHPK3PXP","issuer":"I","timer":"30","digits":"6","counter":"0","algorithm":"SHA1"},
+                    {"kind":"TOTP","account":"b","secret":"JBSWY3DPEHPK3PXQ","issuer":"J","timer":"30","digits":"6","counter":"0","algorithm":"SHA1"}]"#;
+        let out = parse_text(j, None).unwrap();
+        assert_eq!(out.drafts.len(), 1);
+        assert_eq!(out.skipped, 1);
     }
 }

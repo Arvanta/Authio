@@ -119,6 +119,23 @@ pub fn run() {
                         if tray_on {
                             api.prevent_close();
                             let _ = win_e.hide();
+                            // Neither idle auto-lock nor "lock when minimized" is on: nothing else
+                            // would ever lock a vault whose window just left the screen, so closing
+                            // the window locks it. ("No security" vaults have nothing to lock.)
+                            let (auto_min, lock_min) = state_e
+                                .settings
+                                .lock()
+                                .map(|s| (s.auto_lock_minutes, s.lock_on_minimize))
+                                .unwrap_or((0, false));
+                            let no_security = state_e
+                                .session
+                                .lock()
+                                .map(|g| g.as_ref().is_some_and(|s| matches!(s.kdf, vault::Kdf::None { .. })))
+                                .unwrap_or(false);
+                            if auto_min == 0 && !lock_min && !no_security && state_e.is_unlocked() {
+                                state_e.do_lock();
+                                let _ = win_e.emit("authio://locked", ());
+                            }
                         }
                     }
                     WindowEvent::Destroyed => state_e.do_lock(),

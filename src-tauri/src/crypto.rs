@@ -27,12 +27,14 @@ pub fn rand_bytes<const N: usize>() -> [u8; N] {
 }
 
 // Sanity ceilings for KDF parameters read from UNTRUSTED files (backups, vaults).
-// Without them a crafted header (e.g. m = 4 TiB) aborts the process on allocation.
-pub const ARGON2_MAX_M_KIB: u32 = 1_048_576; // 1 GiB
+// Without them a crafted header (e.g. m = 4 TiB) aborts the process on allocation. The ceilings
+// keep the worst case at about 256 MiB — far above every real file (Authio itself writes 64 MiB,
+// Aegis writes scrypt N=2^15, r=8, p=1 = 32 MiB) but harmless on a low-memory PC.
+pub const ARGON2_MAX_M_KIB: u32 = 262_144; // 256 MiB
 pub const ARGON2_MAX_T: u32 = 10;
 pub const ARGON2_MAX_P: u32 = 16;
-pub const SCRYPT_MAX_LOG_N: u8 = 20;
-pub const SCRYPT_MAX_R: u32 = 16;
+pub const SCRYPT_MAX_LOG_N: u8 = 18; // memory = 128 * 2^log_n * r  ->  <= 256 MiB with r = 8
+pub const SCRYPT_MAX_R: u32 = 8;
 pub const SCRYPT_MAX_P: u32 = 16;
 
 pub fn argon2id_derive(password: &[u8], salt: &[u8], m_kib: u32, t: u32, p: u32) -> Result<Zeroizing<[u8; KEY_LEN]>, String> {
@@ -122,6 +124,13 @@ mod tests {
         assert!(argon2id_derive(b"pw", &salt, 65_536, 1000, 4).is_err());
         assert!(scrypt_derive(b"pw", &salt, 60, 8, 1).is_err());
         assert!(scrypt_derive(b"pw", &salt, 15, 1_000_000, 1).is_err());
+        // the old ceilings (1 GiB Argon2, 2 GiB scrypt) are gone
+        assert!(argon2id_derive(b"pw", &salt, 524_288, 1, 1).is_err());
+        assert!(scrypt_derive(b"pw", &salt, 20, 16, 1).is_err());
+        assert!(scrypt_derive(b"pw", &salt, 19, 8, 1).is_err());
+        // real-world parameters are still accepted: Aegis default and Authio's own
+        assert!(scrypt_derive(b"pw", &salt, 15, 8, 1).is_ok());
+        assert!(argon2id_derive(b"pw", &salt, ARGON2_M_KIB, ARGON2_T, ARGON2_P).is_ok());
     }
 
     #[test]

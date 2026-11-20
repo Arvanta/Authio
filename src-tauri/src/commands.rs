@@ -169,14 +169,38 @@ struct AccountsPayloadRef<'a> {
     accounts: &'a [Account],
 }
 
+fn persist_session(state: &AppState, s: &Session) -> Cmd<()> {
+    let payload = Zeroizing::new(
+        serde_json::to_vec(&AccountsPayloadRef { accounts: &s.accounts })
+            .map_err(|e| format!("serialize failure: {e}"))?,
+    );
+    let id = (!s.vault_id.is_empty()).then_some(s.vault_id.as_str());
+    vault::write_envelope_id(&state.vault_path, "vault", &s.kdf, &s.key, &payload, id)
+}
+
 fn persist(state: &AppState) -> Cmd<()> {
+    with_session(state, |s| persist_session(state, s))
+}
+
+/// Change the account list and save it as ONE step. If the closure fails or the
+/// write to disk fails (antivirus / OneDrive holding the file, disk full ...), the
+/// in-memory list is put back exactly as it was, so what the user sees on screen
+/// never differs from what is on disk.
+fn mutate_persist<T>(state: &AppState, f: impl FnOnce(&mut Vec<Account>) -> Cmd<T>) -> Cmd<T> {
     with_session(state, |s| {
-        let payload = Zeroizing::new(
-            serde_json::to_vec(&AccountsPayloadRef { accounts: &s.accounts })
-                .map_err(|e| format!("serialize failure: {e}"))?,
-        );
-        let id = (!s.vault_id.is_empty()).then_some(s.vault_id.as_str());
-        vault::write_envelope_id(&state.vault_path, "vault", &s.kdf, &s.key, &payload, id)
+        let snapshot = s.accounts.clone();
+        let out = match f(&mut s.accounts) {
+            Ok(v) => v,
+            Err(e) => {
+                s.accounts = snapshot;
+                return Err(e);
+            }
+        };
+        if let Err(e) = persist_session(state, s) {
+            s.accounts = snapshot;
+            return Err(e);
+        }
+        Ok(out)
     })
 }
 
@@ -290,17 +314,16 @@ fn draft_from_input(input: DraftIn) -> Cmd<Draft> {
 }
 
 fn add_draft(state: &AppState, draft: Draft) -> Cmd<AccountDto> {
-    let dto = with_session(state, |s| {
-        if s.accounts.iter().any(|a| a.secret.as_slice() == draft.secret.as_slice()) {
+    let dto = mutate_persist(state, |accounts| {
+        if accounts.iter().any(|a| a.secret.as_slice() == draft.secret.as_slice()) {
             return Err("an account with this exact secret already exists".into());
         }
-        let next_sort = s.accounts.iter().map(|a| a.sort).max().unwrap_or(0) + 1;
+        let next_sort = accounts.iter().map(|a| a.sort).max().unwrap_or(0) + 1;
         let account = draft.into_account(new_id(), next_sort, now_unix());
         let dto = account_dto(&account);
-        s.accounts.push(account);
+        accounts.push(account);
         Ok(dto)
     })?;
-    persist(state)?;
     state.touch();
     Ok(dto)
 }
@@ -507,8 +530,11 @@ fn change_unlock_mode_inner(
     }
 
     let (was_keychain, old_id) = with_session(state, |s| Ok((matches!(s.kdf, Kdf::Keychain), s.vault_id.clone())))?;
-    // A vault from 1.0 gets its id here at the latest.
-    let id = if old_id.is_empty() { new_id() } else { old_id.clone() };
+    // Keychain mode gets a NEW id (and so a NEW credential entry) on every re-key: the old entry
+    // is left untouched until the new file is safely on disk, so a crash or power loss at any
+    // moment leaves a vault and a key that still belong together. Other modes keep the id
+    // (a 1.0 vault gets its id here at the latest).
+    let id = if mode == "keychain" || old_id.is_empty() { new_id() } else { old_id.clone() };
     let user = keystore::key_user(&id);
 
     // The key is ALWAYS fresh — never carried over from the previous method. Otherwise any old
@@ -534,9 +560,8 @@ fn change_unlock_mode_inner(
         other => return Err(format!("unknown unlock mode \"{other}\"")),
     };
 
-    // Keychain: the new key must be in the store BEFORE the file that needs it is replaced; if the
-    // write then fails, put the previous entry back so the still-current vault stays openable.
-    let previous_entry = if mode == "keychain" { state.keystore.get(&user).ok() } else { None };
+    // Keychain: the new key goes into its own, new entry BEFORE the file that needs it is written.
+    // If the write fails, that new entry is removed again; the old entry was never touched.
     if mode == "keychain" {
         store_key(state, &user, &new_key)?;
     }
@@ -553,21 +578,16 @@ fn change_unlock_mode_inner(
     });
     if let Err(e) = written {
         if mode == "keychain" {
-            match previous_entry {
-                Some(v) => {
-                    let _ = state.keystore.set(&user, &v);
-                }
-                None => state.keystore.delete(&user),
-            }
+            state.keystore.delete(&user);
         }
         return Err(e);
     }
     // The .bak still holds the vault under the PREVIOUS unlock method (for "no security" that is
     // readable by anyone) — drop it; the next write recreates it under the new method.
     vault::discard_backup(&state.vault_path);
-    // Leaving keychain mode: remove this vault's own entry. The shared legacy entry is never
-    // deleted — another instance may still rely on it.
-    if was_keychain && mode != "keychain" && !old_id.is_empty() {
+    // Only now is the previous entry of this vault obsolete. The shared legacy entry (1.0, no id)
+    // is never deleted — another instance may still rely on it.
+    if was_keychain && !old_id.is_empty() {
         state.keystore.delete(&keystore::key_user(&old_id));
     }
     record_integrity(state, mode, &id);
@@ -610,8 +630,9 @@ pub fn get_codes(state: State<'_, Arc<AppState>>) -> Cmd<Vec<CodeDto>> {
 
 #[tauri::command]
 pub fn hotp_next(state: State<'_, Arc<AppState>>, id: String) -> Cmd<CodeDto> {
-    let dto = with_session(&state, |s| {
-        let a = s.accounts.iter_mut().find(|a| a.id == id).ok_or("account not found")?;
+    // Counter advance + save are one step: a counter value that was never saved is not burned.
+    let dto = mutate_persist(&state, |accounts| {
+        let a = accounts.iter_mut().find(|a| a.id == id).ok_or("account not found")?;
         match &mut a.kind {
             Kind::Hotp { counter } => {
                 let code = otp::hotp(&a.secret, *counter, a.digits, a.algorithm);
@@ -621,18 +642,6 @@ pub fn hotp_next(state: State<'_, Arc<AppState>>, id: String) -> Cmd<CodeDto> {
             _ => Err("not an HOTP account".into()),
         }
     })?;
-    if let Err(e) = persist(&state) {
-        // Do not burn a counter value that was never saved: roll it back.
-        let _ = with_session(&state, |s| {
-            if let Some(a) = s.accounts.iter_mut().find(|a| a.id == id) {
-                if let Kind::Hotp { counter } = &mut a.kind {
-                    *counter = counter.saturating_sub(1);
-                }
-            }
-            Ok(())
-        });
-        return Err(e);
-    }
     state.touch();
     Ok(dto)
 }
@@ -654,8 +663,8 @@ pub fn add_from_uri(state: State<'_, Arc<AppState>>, uri: String) -> Cmd<Vec<Acc
 
 #[tauri::command]
 pub fn update_account(state: State<'_, Arc<AppState>>, id: String, issuer: String, name: String, group: String) -> Cmd<()> {
-    with_session(&state, |s| {
-        let a = s.accounts.iter_mut().find(|a| a.id == id).ok_or("account not found")?;
+    mutate_persist(&state, |accounts| {
+        let a = accounts.iter_mut().find(|a| a.id == id).ok_or("account not found")?;
         if issuer.trim().is_empty() && name.trim().is_empty() {
             return Err("account needs at least an issuer or a name".into());
         }
@@ -664,49 +673,45 @@ pub fn update_account(state: State<'_, Arc<AppState>>, id: String, issuer: Strin
         a.group = group.trim().to_string();
         Ok(())
     })?;
-    persist(&state)?;
     state.touch();
     Ok(())
 }
 
 #[tauri::command]
 pub fn delete_account(state: State<'_, Arc<AppState>>, id: String) -> Cmd<()> {
-    with_session(&state, |s| {
-        let before = s.accounts.len();
-        s.accounts.retain(|a| a.id != id);
-        if s.accounts.len() == before {
+    mutate_persist(&state, |accounts| {
+        let before = accounts.len();
+        accounts.retain(|a| a.id != id);
+        if accounts.len() == before {
             return Err("account not found".into());
         }
         Ok(())
     })?;
-    persist(&state)?;
     state.touch();
     Ok(())
 }
 
 #[tauri::command]
 pub fn set_pinned(state: State<'_, Arc<AppState>>, id: String, pinned: bool) -> Cmd<()> {
-    with_session(&state, |s| {
-        let a = s.accounts.iter_mut().find(|a| a.id == id).ok_or("account not found")?;
+    mutate_persist(&state, |accounts| {
+        let a = accounts.iter_mut().find(|a| a.id == id).ok_or("account not found")?;
         a.pinned = pinned;
         Ok(())
     })?;
-    persist(&state)?;
     state.touch();
     Ok(())
 }
 
 #[tauri::command]
 pub fn reorder(state: State<'_, Arc<AppState>>, ids: Vec<String>) -> Cmd<()> {
-    with_session(&state, |s| {
+    mutate_persist(&state, |accounts| {
         for (i, id) in ids.iter().enumerate() {
-            if let Some(a) = s.accounts.iter_mut().find(|a| &a.id == id) {
+            if let Some(a) = accounts.iter_mut().find(|a| &a.id == id) {
                 a.sort = i as u64;
             }
         }
         Ok(())
     })?;
-    persist(&state)?;
     state.touch();
     Ok(())
 }
@@ -808,6 +813,9 @@ pub fn export_backup(
     };
     let json = Zeroizing::new(serde_json::to_vec(&backup).map_err(|e| e.to_string())?);
     let dest = Path::new(&path);
+    if vault::is_protected_path(dest, &state.vault_path, &state.settings_path) {
+        return Err("that is Authio's own data file — choose a different name or folder for the backup".into());
+    }
 
     if encrypted {
         let pw = password.filter(|p| min_chars(p, 8)).ok_or("the backup passphrase must be at least 8 characters")?;
@@ -979,25 +987,24 @@ pub fn import_apply(state: State<'_, Arc<AppState>>, indices: Vec<u32>) -> Cmd<V
         let mut guard = state.pending.lock().map_err(|_| "internal error (state lock)".to_string())?;
         guard.take().ok_or("no pending import — start the import again")?
     };
-    let mut added = Vec::new();
-    with_session(&state, |s| {
-        let mut next_sort = s.accounts.iter().map(|a| a.sort).max().unwrap_or(0);
+    let added = mutate_persist(&state, |accounts| {
+        let mut added = Vec::new();
+        let mut next_sort = accounts.iter().map(|a| a.sort).max().unwrap_or(0);
         for idx in indices {
             let Some(draft) = pending.drafts.get(idx as usize) else { continue };
-            if s.accounts.iter().any(|a| a.secret.as_slice() == draft.secret.as_slice()) {
+            if accounts.iter().any(|a| a.secret.as_slice() == draft.secret.as_slice()) {
                 continue; // exact duplicates never get in, even if forced
             }
             next_sort += 1;
             let account = draft.clone().into_account(new_id(), next_sort, now_unix());
             added.push(account_dto(&account));
-            s.accounts.push(account);
+            accounts.push(account);
         }
-        Ok(())
+        if added.is_empty() {
+            return Err("nothing was imported (all selected accounts were duplicates)".into());
+        }
+        Ok(added)
     })?;
-    if added.is_empty() {
-        return Err("nothing was imported (all selected accounts were duplicates)".into());
-    }
-    persist(&state)?;
     Ok(added)
 }
 
@@ -1192,11 +1199,15 @@ mod tests {
         let a = app("rot-kc", &ks);
         setup_vault_inner(&a, "keychain", None).unwrap();
         add_account(&a, "K");
-        let id = vault::read_envelope(&a.vault_path).unwrap().vault_id.unwrap();
-        let k1 = ks.get(&keystore::key_user(&id)).unwrap();
+        let id1 = vault::read_envelope(&a.vault_path).unwrap().vault_id.unwrap();
+        let k1 = ks.get(&keystore::key_user(&id1)).unwrap();
         change_unlock_mode_inner(&a, "keychain", None, None).unwrap();
-        let k2 = ks.get(&keystore::key_user(&id)).unwrap();
+        let id2 = vault::read_envelope(&a.vault_path).unwrap().vault_id.unwrap();
+        assert_ne!(id1, id2, "every keychain re-key gets its own entry");
+        let k2 = ks.get(&keystore::key_user(&id2)).unwrap();
         assert_ne!(k1, k2);
+        assert!(ks.get(&keystore::key_user(&id1)).is_err(), "previous entry removed once the new file is safe");
+        assert_eq!(entry_keys(&ks).len(), 1);
         change_unlock_mode_inner(&a, "none", None, None).unwrap();
         let k3 = STANDARD.encode(header_key(&a).unwrap());
         assert_ne!(k2, k3);
@@ -1224,7 +1235,7 @@ mod tests {
     }
 
     #[test]
-    fn failed_mode_change_restores_the_previous_keychain_entry() {
+    fn failed_keychain_rekey_keeps_the_old_entry_and_leaves_no_new_one() {
         let ks = Arc::new(MemKeyStore::default());
         let a = app("rollback", &ks);
         setup_vault_inner(&a, "keychain", None).unwrap();
@@ -1233,11 +1244,49 @@ mod tests {
         let before = ks.get(&keystore::key_user(&id)).unwrap();
         std::fs::create_dir_all(a.vault_path.with_extension("tmp")).unwrap(); // make the write fail
         assert!(change_unlock_mode_inner(&a, "keychain", None, None).is_err());
-        assert_eq!(ks.get(&keystore::key_user(&id)).unwrap(), before, "old key put back");
+        assert_eq!(ks.get(&keystore::key_user(&id)).unwrap(), before, "old key never touched");
+        assert_eq!(entry_keys(&ks).len(), 1, "the half-made new entry is removed again");
         std::fs::remove_dir_all(a.vault_path.with_extension("tmp")).unwrap();
         lock(&a);
         unlock_inner(&a, None).unwrap();
         assert_eq!(accounts(&a), vec!["Safe"]);
+    }
+
+    /// The crash the review described: the new key is already in the store, the process dies before
+    /// the vault file is replaced. The file on disk must still open with the entry it points to.
+    #[test]
+    fn crash_between_new_key_and_new_file_loses_nothing() {
+        let ks = Arc::new(MemKeyStore::default());
+        let a = app("crash", &ks);
+        setup_vault_inner(&a, "keychain", None).unwrap();
+        add_account(&a, "Survivor");
+        // what a re-key does first, then "the power goes out":
+        store_key(&a, &keystore::key_user("deadbeefdeadbeefdeadbeefdeadbeef"), &[7u8; 32]).unwrap();
+        lock(&a);
+        unlock_inner(&a, None).unwrap();
+        assert_eq!(accounts(&a), vec!["Survivor"]);
+    }
+
+    #[test]
+    fn failed_save_rolls_the_account_list_back() {
+        let ks = Arc::new(MemKeyStore::default());
+        let a = app("memrollback", &ks);
+        setup_vault_inner(&a, "none", None).unwrap();
+        add_account(&a, "Existing");
+        std::fs::create_dir_all(a.vault_path.with_extension("tmp")).unwrap(); // every save fails now
+        let d = otpauth::parse_otpauth("otpauth://totp/New:me?secret=GEZDGNBVGY3TQOJQ&issuer=New").ok().unwrap();
+        assert!(add_draft(&a, d.clone()).is_err());
+        assert_eq!(accounts(&a), vec!["Existing"], "the failed add must not stay in memory");
+        // delete / edit / pin / reorder fail the same way, and leave everything as it was
+        let id = with_session(&a, |s| Ok(s.accounts[0].id.clone())).unwrap();
+        assert!(mutate_persist(&a, |acc| { acc.retain(|x| x.id != id); Ok(()) }).is_err());
+        assert_eq!(accounts(&a), vec!["Existing"], "the failed delete must not stay in memory");
+        assert!(mutate_persist(&a, |acc| { acc[0].pinned = true; Ok(()) }).is_err());
+        assert!(!with_session(&a, |s| Ok(s.accounts[0].pinned)).unwrap());
+        // once saving works again, retrying the add succeeds (no bogus "already exists")
+        std::fs::remove_dir_all(a.vault_path.with_extension("tmp")).unwrap();
+        add_draft(&a, d).unwrap();
+        assert_eq!(accounts(&a), vec!["Existing", "New"]);
     }
 
     #[test]

@@ -39,7 +39,7 @@ the master-password mode is the recommendation for high-value secrets.
 
 **Key management (since 1.1.0)**
 - Every vault has a random id in its header; keychain mode stores its key in an entry named
-  after that id (`vault-key-<id>`), so several vaults (installed + portable copies, re-installs)
+  after that id (`vault-key-<id>`; a keychain re-key creates a new id and entry and deletes the old one only after the new vault file is written), so several vaults (installed + portable copies, re-installs)
   never overwrite one another's key. Vaults from 1.0 used one shared entry: they are given an id
   on first unlock (key copied first, then the id written; the shared entry is left in place; any
   failure leaves the vault working as before). If saving the vault fails, the previous keychain
@@ -62,7 +62,7 @@ the master-password mode is the recommendation for high-value secrets.
 ## Memory & process hardening
 
 - `Zeroizing` containers for the master key, derived keys, per-account secret bytes, the decrypted/serialised vault payload buffers, and password strings received over IPC. This is **best effort**: transient copies made by the JSON parser, the WebView/IPC layer or the OS (swap, crash dumps) are outside the app's control.
-- KDF parameters read from untrusted files (backups, Aegis) are range-checked, so a crafted header cannot exhaust memory.
+- KDF parameters read from untrusted files (backups, Aegis) are range-checked against fixed ceilings (Argon2id ≤ 256 MiB, t ≤ 10, p ≤ 16; scrypt N ≤ 2^18, r ≤ 8, p ≤ 16 — about 256 MiB at most). A crafted header therefore cannot request gigabytes, but a file at the ceiling can still make the import take a few seconds and use up to ~256 MiB. Genuine files are far below this (Authio: 64 MiB; Aegis: 32 MiB).
 - Session + pending-import drafts are dropped (zeroized) on: manual lock, auto-lock,
   minimize-lock, and window close.
 - **Lock wipes the UI too**: on every lock, open dialogs/menus (e.g. a revealed secret) are removed from the DOM along with the cached account list.

@@ -180,6 +180,30 @@ pub fn write_user_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
     replace_file(&tmp, path)
 }
 
+/// True if `dest` is the vault itself, one of its sidecar files (`.bak`, `.tmp`, `.corrupt`) or the
+/// settings file — i.e. somewhere an export must never write, or a wrong pick in the save dialog
+/// would replace the user's real vault with a backup. Compared case-insensitively and through
+/// symlinks / `..` (the folder is canonicalized; the file itself may not exist yet).
+pub fn is_protected_path(dest: &Path, vault_path: &Path, settings_path: &Path) -> bool {
+    let canon_dir = |p: &Path| p.parent().and_then(|d| std::fs::canonicalize(d).ok());
+    let (Some(dest_dir), Some(data_dir)) = (canon_dir(dest), canon_dir(vault_path)) else {
+        return false;
+    };
+    if dest_dir != data_dir {
+        return false;
+    }
+    let Some(name) = dest.file_name().map(|n| n.to_string_lossy().to_lowercase()) else {
+        return false;
+    };
+    let vault_name = vault_path.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let stem = vault_name.rsplit_once('.').map(|(s, _)| s.to_string()).unwrap_or(vault_name.clone());
+    let settings_name = settings_path.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+    name == vault_name
+        || name == settings_name
+        || ["bak", "tmp", "corrupt"].iter().any(|ext| name == format!("{stem}.{ext}"))
+        || name.ends_with(".authio-tmp")
+}
+
 /// Drop the `.bak` (e.g. after the unlock method changed: it is still protected
 /// by the OLD method — for "no security" mode that means readable by anyone).
 pub fn discard_backup(path: &Path) {
@@ -294,5 +318,22 @@ mod tests {
         assert_eq!(names, vec!["my-export.json".to_string()]);
         assert_eq!(std::fs::read(&path).unwrap(), b"NEW");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn protects_vault_and_sidecars_from_being_an_export_target() {
+        let d = std::env::temp_dir().join(format!("authio-prot-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("sub")).unwrap();
+        let v = d.join("vault.json");
+        let st = d.join("settings.json");
+        for n in ["vault.json", "VAULT.JSON", "vault.bak", "vault.tmp", "vault.corrupt", "settings.json", "x.authio-tmp"] {
+            assert!(is_protected_path(&d.join(n), &v, &st), "{n} must be protected");
+        }
+        // reached through "sub/.." — still the same file
+        assert!(is_protected_path(&d.join("sub").join("..").join("vault.json"), &v, &st));
+        for ok in [d.join("backup.json"), d.join("sub").join("vault.json"), d.join("vault2.json")] {
+            assert!(!is_protected_path(&ok, &v, &st), "{ok:?} is a fine export target");
+        }
     }
 }

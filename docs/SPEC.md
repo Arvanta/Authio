@@ -23,7 +23,7 @@ This document is the single source of truth for Authio's scope. It describes the
 - Default 30-second period; supports 15/30/60 s and custom periods from `otpauth://` URIs.
 - Algorithms: **SHA-1, SHA-256, SHA-512** (per-account, parsed from URI / manual input).
 - Digits: **6 or 8** (extensible), grouped rendering for readability (`123 456`).
-- **HOTP (RFC 4226)** counter-based codes as an optional per-account type; counter increments only on explicit user request.
+- **HOTP (RFC 4226)** counter-based codes as an optional per-account type; counter increments only on explicit user request — while a generated code is still on screen, a click copies it instead of advancing the counter, and repeated clicks during a running request are ignored.
 - All computation is local; the app never requires internet access.
 
 ### 2. Adding accounts
@@ -65,8 +65,8 @@ This document is the single source of truth for Authio's scope. It describes the
   - **Windows sign-in (OS keychain)** — random 256-bit key stored in the Windows Credential Manager via the `keyring` crate; vault unlocks without typing a password while the OS session is authenticated.
   - **No security** — key embedded in the vault file (obfuscation only, clearly labelled and warned about in the UI).
 - **Random salt & nonce per encryption**; header records version + KDF + cipher parameters for forward migration.
-- **Per-vault credential entries + key rotation**: each vault has a random id; keychain-mode keys live in `vault-key-<id>` (1.0 vaults migrate on first unlock); changing the unlock method always generates a fresh key; a changed vault file is flagged before unlock (see SECURITY.md).
-- **Atomic persistence**: fsync'd temp file, then replace (the old file is never deleted first), plus an automatic `.bak` of the last good vault. A missing/damaged `vault.json` is **self-healed at startup** from an intact `vault.tmp` or `vault.bak` (damaged copy kept as `vault.corrupt`). Exports never leave `.bak`/`.tmp` files beside the chosen path.
+- **Per-vault credential entries + key rotation**: each vault has a random id; keychain-mode keys live in `vault-key-<id>` (1.0 vaults migrate on first unlock); changing the unlock method always generates a fresh key, and a keychain re-key also gets a **new id and a new credential entry** — the old entry is deleted only after the new file is safely on disk, so a crash at any moment leaves a vault and a key that still match; a changed vault file is flagged before unlock (see SECURITY.md).
+- **Atomic persistence**: fsync'd temp file, then replace (the old file is never deleted first), plus an automatic `.bak` of the last good vault. A missing/damaged `vault.json` is **self-healed at startup** from an intact `vault.tmp` or `vault.bak` (damaged copy kept as `vault.corrupt`). Exports never leave `.bak`/`.tmp` files beside the chosen path, and can never target Authio's own `vault.json`, its sidecar files or `settings.json`. Every change to the account list (add, edit, delete, pin, reorder, import, HOTP counter) is saved as one step: if writing fails, the in-memory list is rolled back so the screen never differs from the disk.
 - **Auto-lock**: after N minutes of inactivity (default 5; 0 = off) and when the window leaves the screen — minimized **or hidden to the system tray** (same toggle; a hidden window is not "minimized" at the OS level, but the lock semantics are identical for the user). Key and decrypted accounts are wiped from memory (`zeroize`). Auto-lock is skipped entirely in "no security" mode.
 - **Auto-unlock at startup** (once) for keychain / no-security vaults; manual `Ctrl+L` locking still available.
 - **Screen-capture protection**: window content protection (`set_content_protected`) on Windows so screenshots/screen-share show a black surface.
@@ -102,6 +102,7 @@ This document is the single source of truth for Authio's scope. It describes the
   | **andOTP** | plain backup JSON array (`secret`/`issuer`/`label`/`type`) | encrypted andOTP exports unsupported |
   | **Raivo** | `raivo-otp-export.json` | numeric fields arrive as strings — accepted in both forms |
   | **Bitwarden** | vault-export `.csv` (`login_totp` column) | column values may be `otpauth://` URIs or raw Base32 seeds; hand-rolled CSV parser (quoted fields), no extra dependency |
+  | **2FAS / andOTP / Raivo / Aegis — Steam & other types** | `STEAM` entries | imported as Steam-flavored (5-character) accounts; unsupported types (mOTP, unknown) are skipped and counted, never stored as plain TOTP |
   | **Steam (SDA maFile)** | single JSON object with Base64 `shared_secret` | imports as a Steam-flavored (5-character) account |
 
 - **Duplicate detection** (by secret equality and label match) with keep / skip / import-as-copy choices.
@@ -132,7 +133,7 @@ This document is the single source of truth for Authio's scope. It describes the
 - **SHA-256 release checksums** — every release asset ships with a `<file>.sha256` sidecar in `sha256sum -c` format.
 - **Portable mode** — `--portable` keeps vault + settings in `authio-data/` next to the executable.
 - **More importers** — 2FAS, Raivo, andOTP, Bitwarden TOTP CSV, and Steam maFile (each an isolated, individually tested module).
-- **System tray with minimize-to-tray** — Settings toggle; tray menu: show / lock / quit; the close button hides to tray.
+- **System tray with minimize-to-tray** — Settings toggle; tray menu: show / lock / quit; the close button hides to tray (and locks the vault when neither idle auto-lock nor lock-when-minimized is enabled).
 - **Single instance** — a second launch focuses the existing window (restoring it from the tray) and exits.
 - **Specialized issuers: Steam / Battle.net** — Steam = 5-character custom-alphabet rendering + maFile import, auto-detected from `issuer=Steam` URIs; Battle.net needs nothing special — standard TOTP SHA-1 / 8 digits / 30 s, supported from day one.
 

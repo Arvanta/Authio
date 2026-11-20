@@ -40,6 +40,7 @@
 | **andOTP** | ✅ plain backup JSON | |
 | **Raivo** | ✅ `raivo-otp-export.json` | |
 | **Bitwarden** | ✅ vault-export CSV (`login_totp`) | TOTP URIs or raw seeds |
+| **Steam entries in 2FAS / andOTP / Aegis** | ✅ | imported as Steam-style codes; mOTP and unknown types are skipped |
 | **Steam (maFile)** | ✅ SDA `shared_secret` JSON | imported as Steam-style 5-character codes |
 | **otpauth lines** | ✅ lists of URIs | |
 | **Export** | encrypted (recommended) or plain JSON, your choice | plain export requires explicit acknowledgement |
