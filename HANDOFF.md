@@ -137,6 +137,8 @@ tiles layout) — use it as a visual QA gate.
 22. Importers map a type field through `token_type()`: `STEAM` -> Steam flavor, anything unknown (mOTP, future types) -> skipped. Never let an unknown type fall through to plain TOTP.
 23. `export_backup` refuses `vault::is_protected_path` targets (vault, `.bak/.tmp/.corrupt`, settings).
 24. Releases are created as **drafts** (`releaseDraft: true` + `draft: true`); publish manually after testing.
+25. Tabbed modals must render their first tab immediately (call `show(<first tab>)` when the modal opens) — marking a tab `.sel` does not build its content. The Import dialog once opened empty until the user switched tabs.
+26. `tray` is **off by default** (Rust `Settings::default`, serde default, and the TS fallback must all agree).
 
 ## 8. Extending
 

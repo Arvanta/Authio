@@ -48,7 +48,7 @@ pub fn run() {
                 use tauri::menu::MenuBuilder;
                 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
-                let tray_enabled = state.settings.lock().map(|s| s.tray).unwrap_or(true);
+                let tray_enabled = state.settings.lock().map(|s| s.tray).unwrap_or(false);
                 let menu = MenuBuilder::new(app)
                     .text("show", "Show Authio")
                     .text("lock", "Lock")

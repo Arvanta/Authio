@@ -191,7 +191,7 @@ let settings: Settings = {
   show_timer_number: true,
   grouped_view: true,
   show_avatars: true,
-  tray: true,
+  tray: false,
 };
 let accounts: AccountDto[] = [];
 let search = "";
@@ -1251,6 +1251,7 @@ function openImportModal() {
   const bText = mkTabBtn("text", t("import.tab.text"));
   tabs.append(bFile, bText);
   bFile.classList.add("sel");
+  show("file"); // the first tab must be filled in right away, not only after switching tabs
 
   function show(id: TabId) {
     content.innerHTML = "";

@@ -234,7 +234,8 @@ pub struct Settings {
     /// Rows view only: show the round letter avatar at the start of each item.
     #[serde(default = "default_true")]
     pub show_avatars: bool,
-    #[serde(default = "default_true")]
+    /// Off until the user turns it on (Settings → "Run in system tray").
+    #[serde(default)]
     pub tray: bool,
     #[serde(default = "default_lang")]
     pub lang: String, // UI language — "en" | "de" | "es" | "fr" | "ja" | "ko" | "pt" | "ru" | "zh-CN"
@@ -279,7 +280,7 @@ impl Default for Settings {
             show_timer_number: true,
             grouped_view: true,
             show_avatars: true,
-            tray: true,
+            tray: false,
             lang: default_lang(),
             window: None,
         }
@@ -314,5 +315,15 @@ mod tests {
         assert!(s.show_avatars, "row avatars are on by default");
         let d = Settings::default();
         assert!(d.grouped_view && d.show_avatars);
+    }
+
+    #[test]
+    fn system_tray_is_off_until_the_user_enables_it() {
+        assert!(!Settings::default().tray, "fresh installs start without a tray icon");
+        let s: Settings = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
+        assert!(!s.tray, "a settings file without the field also means off");
+        // a user who turned it on keeps it on
+        let on: Settings = serde_json::from_str(r#"{"tray":true}"#).unwrap();
+        assert!(on.tray);
     }
 }

@@ -133,7 +133,7 @@ This document is the single source of truth for Authio's scope. It describes the
 - **SHA-256 release checksums** — every release asset ships with a `<file>.sha256` sidecar in `sha256sum -c` format.
 - **Portable mode** — `--portable` keeps vault + settings in `authio-data/` next to the executable.
 - **More importers** — 2FAS, Raivo, andOTP, Bitwarden TOTP CSV, and Steam maFile (each an isolated, individually tested module).
-- **System tray with minimize-to-tray** — Settings toggle; tray menu: show / lock / quit; the close button hides to tray (and locks the vault when neither idle auto-lock nor lock-when-minimized is enabled).
+- **System tray with minimize-to-tray** — Settings toggle, **off by default** (the close button quits until the user enables it); tray menu: show / lock / quit; the close button hides to tray (and locks the vault when neither idle auto-lock nor lock-when-minimized is enabled).
 - **Single instance** — a second launch focuses the existing window (restoring it from the tray) and exits.
 - **Specialized issuers: Steam / Battle.net** — Steam = 5-character custom-alphabet rendering + maFile import, auto-detected from `issuer=Steam` URIs; Battle.net needs nothing special — standard TOTP SHA-1 / 8 digits / 30 s, supported from day one.
 
