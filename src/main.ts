@@ -165,7 +165,9 @@ async function copyText(text: string): Promise<boolean> {
 
 function field(labelText: string, input: HTMLElement): HTMLElement {
   const wrap = el("div");
-  wrap.append(el("label", "lbl", labelText), input);
+  if (labelText) wrap.append(el("label", "lbl", labelText));
+  else wrap.className = "bare"; // label-less input (passwords whose placeholder says it all): stacked with a gap
+  wrap.append(input);
   return wrap;
 }
 
@@ -198,6 +200,18 @@ let search = "";
 let groupFilter = "ALL"; // "ALL" | "__none__" | group name
 let groupSelEl: HTMLSelectElement | null = null;
 const hidden = new Set<string>();
+/** With "Hide codes until revealed" on: a code the user revealed hides itself again this long after
+ *  the last interaction (click / copy), so it never stays on screen for onlookers. */
+const REVEAL_MS = 15000;
+const revealUntil = new Map<string, number>();
+function revealCode(id: string) {
+  hidden.delete(id);
+  if (settings.hide_codes) revealUntil.set(id, Date.now() + REVEAL_MS);
+}
+/** Copying a revealed code counts as interaction: restart its countdown. */
+function keepRevealed(id: string) {
+  if (settings.hide_codes && revealUntil.has(id)) revealUntil.set(id, Date.now() + REVEAL_MS);
+}
 const lastHotp = new Map<string, { code: string; until: number }>();
 const tickRefs = new Map<
   string,
@@ -247,6 +261,7 @@ function setRoute(r: Route) {
     search = "";
     lastHotp.clear();
     hidden.clear();
+    revealUntil.clear();
   }
 }
 
@@ -451,6 +466,7 @@ function renderLock(auto = false) {
 async function enterMain() {
   accounts = await api.listAccounts();
   hidden.clear();
+  revealUntil.clear();
   if (settings.hide_codes) for (const a of accounts) hidden.add(a.id);
   lastHotp.clear();
   renderMain();
@@ -551,6 +567,7 @@ async function deleteAccountFlow(a: AccountDto) {
     try {
       await api.deleteAccount(a.id);
       hidden.delete(a.id);
+      revealUntil.delete(a.id);
       toast(t("toast.deleted"));
       await refresh();
     } catch (e) {
@@ -627,11 +644,12 @@ function accountCard(a: AccountDto): HTMLElement {
     const value = isHotp ? lastHotp.get(a.id)?.code : dto?.code ?? undefined;
     if (!value) {
       if (isHotp) await doHotp(a);
-      else hidden.delete(a.id);
+      else revealCode(a.id);
       void pollCodes();
       return;
     }
     const ok = await copyText(value);
+    if (ok) keepRevealed(a.id);
     if (ok) {
       copyB.innerHTML = "";
       copyB.append(icon("check"));
@@ -650,10 +668,10 @@ function accountCard(a: AccountDto): HTMLElement {
       return;
     }
     if (hidden.has(a.id)) {
-      hidden.delete(a.id);
+      revealCode(a.id); // first click only shows the code — it does not touch the clipboard
     } else {
       const dto = await latestCode(a);
-      if (dto?.code) await copyText(dto.code);
+      if (dto?.code && (await copyText(dto.code))) keepRevealed(a.id);
     }
     void pollCodes();
   };
@@ -747,11 +765,12 @@ function tileCard(a: AccountDto): HTMLElement {
     const value = isHotp ? lastHotp.get(a.id)?.code : dto?.code ?? undefined;
     if (!value) {
       if (isHotp) await doHotp(a);
-      else hidden.delete(a.id);
+      else revealCode(a.id);
       void pollCodes();
       return;
     }
     const ok = await copyText(value);
+    if (ok) keepRevealed(a.id);
     if (ok) {
       copyB.innerHTML = "";
       copyB.append(icon("check"));
@@ -768,10 +787,10 @@ function tileCard(a: AccountDto): HTMLElement {
       return;
     }
     if (hidden.has(a.id)) {
-      hidden.delete(a.id);
+      revealCode(a.id); // first click only shows the code — it does not touch the clipboard
     } else {
       const dto = await latestCode(a);
-      if (dto?.code) await copyText(dto.code);
+      if (dto?.code && (await copyText(dto.code))) keepRevealed(a.id);
     }
     void pollCodes();
   };
@@ -850,6 +869,11 @@ function applyCodes(codes: CodeDto[]) {
       continue;
     }
     if (!dto.code) continue;
+    const until = revealUntil.get(dto.id);
+    if (until !== undefined && until <= Date.now()) {
+      revealUntil.delete(dto.id);
+      if (settings.hide_codes) hidden.add(dto.id);
+    }
     if (hidden.has(dto.id)) {
       ref.code.textContent = "•".repeat(acc.digits).replace(/(.{3})(?=.)/g, "$1 ");
       ref.code.classList.add("hidden-code");
@@ -985,9 +1009,11 @@ function renderMain() {
     if (settings.hide_codes) {
       settings.hide_codes = false;
       hidden.clear();
+      revealUntil.clear();
       eyeAll.title = t("main.hideall");
     } else {
       settings.hide_codes = true;
+      revealUntil.clear();
       accounts.forEach((a) => hidden.add(a.id));
       eyeAll.title = t("main.showall");
     }
@@ -1175,8 +1201,9 @@ function openAddModal() {
     const fCounter = field(t("add.manual.counter"), counter);
     const rowKind = el("div", "row2");
     rowKind.append(fKind, field(t("add.manual.algorithm"), algo));
+    const fDigits = field(t("add.manual.digits"), digits);
     const rowNums = el("div", "row2");
-    rowNums.append(fPeriod, fCounter);
+    rowNums.append(fPeriod, fCounter, fDigits); // period (TOTP) or counter (HOTP) next to digits
     fCounter.style.display = "none";
     kind.onchange = () => {
       const hotp = kind.value === "hotp";
@@ -1217,7 +1244,6 @@ function openAddModal() {
       field(t("add.manual.secret"), secret),
       rowKind,
       rowNums,
-      field(t("add.manual.digits"), digits),
       el("p", "hint", t("add.manual.hint")),
       err,
     );
@@ -1370,8 +1396,8 @@ function openImportPreview(preview: PreviewDto) {
     if (!e.duplicate) selected.add(e.index);
   });
 
-  const sel = el("button", "tab", t("import.preview.selectall"));
-  sel.style.marginTop = "6px";
+  const sel = el("button", "linkbtn", t("import.preview.selectall"));
+  sel.type = "button";
 
   if (preview.entries.length === 0) {
     h.body.append(el("p", "hint", t("import.preview.none")));
@@ -1398,7 +1424,9 @@ function openImportPreview(preview: PreviewDto) {
     const metaCol = el("div");
     const issuerLine = el("div", "issuer", e.issuer || e.name);
     if (e.duplicate) issuerLine.append(el("span", "badge", t("import.preview.dupe")));
-    metaCol.append(issuerLine, el("div", "name", `${e.issuer ? e.name : ""} · ${e.kind.toUpperCase()} · ${e.digits} digits`));
+    const detail = [e.issuer ? e.name : "", e.kind.toUpperCase(), `${e.digits} digits`].filter(Boolean).join(" · ");
+    metaCol.className = "pv-meta-col";
+    metaCol.append(issuerLine, el("div", "name", detail));
     row.append(cb, metaCol);
     list.append(row);
   }
@@ -1471,11 +1499,10 @@ function openExportModal() {
   warn.append(icon("alert"), document.createTextNode(t("export.plain.warn")));
   warn.style.borderColor = "color-mix(in srgb, var(--danger) 40%, transparent)";
   warn.style.background = "color-mix(in srgb, var(--danger) 8%, transparent)";
-  const ack = el("label", "pv-row");
-  ack.style.cursor = "pointer";
+  const ack = el("label", "ack");
   const ackCb = el("input") as HTMLInputElement;
   ackCb.type = "checkbox";
-  ack.append(ackCb, el("div", "issuer", t("export.plain.ack")));
+  ack.append(ackCb, el("span", "", t("export.plain.ack")));
   plainFields.append(warn, ack);
   plainFields.style.display = "none";
 
@@ -1637,6 +1664,7 @@ async function openSettingsModal() {
   hideSw.onchange = () => {
     settings.hide_codes = hideSw.checked;
     hidden.clear();
+    revealUntil.clear();
     if (settings.hide_codes) accounts.forEach((a) => hidden.add(a.id));
     void save();
     renderList();

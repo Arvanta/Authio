@@ -139,6 +139,8 @@ tiles layout) — use it as a visual QA gate.
 24. Releases are created as **drafts** (`releaseDraft: true` + `draft: true`); publish manually after testing.
 25. Tabbed modals must render their first tab immediately (call `show(<first tab>)` when the modal opens) — marking a tab `.sel` does not build its content. The Import dialog once opened empty until the user switched tabs.
 26. `tray` is **off by default** (Rust `Settings::default`, serde default, and the TS fallback must all agree).
+27. "Hide codes until revealed": first click on a hidden code only reveals it (never touches the clipboard); later clicks copy. A revealed code hides itself again `REVEAL_MS` (15 s) after the last click/copy (`revealUntil` map, checked in `applyCodes`). HOTP has its own 30 s display timer.
+28. Checkboxes/radios must not inherit the text-field `width:100%` (rule `input[type=checkbox]:not(.switch)` in styles.css). `field("", input)` makes a label-less `.bare` wrapper that stacks with an 8 px gap; manual-entry shows period/counter next to digits in one row.
 
 ## 8. Extending
 

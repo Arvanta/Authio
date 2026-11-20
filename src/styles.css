@@ -120,11 +120,27 @@ textarea:focus-visible {
   border-color: var(--accent);
   box-shadow: 0 0 0 1.5px var(--accent);
 }
+/* Checkboxes / radios are NOT text fields: without this they inherit width:100% and padding from
+   the rule above and float in the middle of a wide empty box. Switches have their own sizing. */
+input[type="checkbox"]:not(.switch),
+input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  padding: 0;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
 textarea {
   resize: vertical;
   min-height: 64px;
   font-family: var(--mono);
   font-size: 12.5px;
+}
+.bare + .bare,
+.bare {
+  margin-top: 8px;
 }
 label.lbl {
   display: block;
@@ -611,13 +627,18 @@ body[data-density="comfortable"] .code {
 .pv-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 11px;
+  gap: 12px;
+  padding: 8px 12px;
+  cursor: pointer;
   border-bottom: 1px solid var(--border);
   background: var(--card);
 }
 .pv-row:last-child {
   border-bottom: none;
+}
+.pv-meta-col {
+  flex: 1;
+  min-width: 0;
 }
 .pv-row .issuer {
   font-weight: 600;
@@ -626,6 +647,28 @@ body[data-density="comfortable"] .code {
 .pv-row .name {
   color: var(--muted);
   font-size: 12px;
+}
+.linkbtn {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 2px 0;
+  margin: 8px 0 0;
+  cursor: pointer;
+}
+.linkbtn:hover {
+  text-decoration: underline;
+}
+.ack {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 2px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
 }
 .pv-row.duplicate {
   opacity: 0.55;

@@ -41,7 +41,7 @@ This document is the single source of truth for Authio's scope. It describes the
 - List of all accounts with simultaneous live codes; automatic per-second refresh.
 - **One-click copy** (click code or copy button) with subtle "copied" feedback.
 - Countdown to expiry + **circular progress indicator** with the seconds remaining drawn inside the ring (number can be hidden in Settings).
-- **Codes hidden until requested** (default: dots; tap to reveal); global "show codes" toggle.
+- **Codes hidden until requested** (default: dots; first click only reveals, later clicks copy); a revealed code hides itself again 15 s after the last click/copy; global "show codes" toggle.
 - HOTP codes revealed on demand (each reveal advances the counter, mirroring the server).
 
 ### 4. Account management
