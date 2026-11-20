@@ -136,7 +136,6 @@ tiles layout) — use it as a visual QA gate.
 21. A keychain re-key uses a NEW `vault_id` (new credential entry); the old entry is deleted only after the new file is on disk. Never write the new key over the entry the current file still depends on.
 22. Importers map a type field through `token_type()`: `STEAM` -> Steam flavor, anything unknown (mOTP, future types) -> skipped. Never let an unknown type fall through to plain TOTP.
 23. `export_backup` refuses `vault::is_protected_path` targets (vault, `.bak/.tmp/.corrupt`, settings).
-25. Visual language (src/styles.css, tokens at the top): flat neutral surface, rows grouped into one rounded surface per group with hairlines between (no per-row boxes/shadows), large tabular numerals for codes, verdigris accent kept for the primary action + countdown ring (amber ≤10 s, red ≤5 s, set from `applyCodes`), tinted avatar tiles driven by a `--h` hue variable, row tools revealed on hover/focus-within, inverted toasts. Don't hard-code colors in components — use the tokens (both themes). Screenshots: `docs/screenshot-main.png` is regenerated with the headless-Playwright recipe in section 6.
 24. Releases are created as **drafts** (`releaseDraft: true` + `draft: true`); publish manually after testing.
 
 ## 8. Extending
