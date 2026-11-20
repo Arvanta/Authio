@@ -474,11 +474,11 @@ function baseCmp(): (x: AccountDto, y: AccountDto) => number {
     : (x, y) => x.sort - y.sort;
 }
 
-function avatarColor(key: string): string {
+/** A stable hue per account; the stylesheet turns it into a quiet tinted tile (light and dark). */
+function avatarHue(key: string): number {
   let h = 0;
   for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  const hue = h % 360;
-  return `hsl(${hue} 55% 46%)`;
+  return h % 360;
 }
 
 function grouped(code: string): string {
@@ -576,7 +576,7 @@ function buildTimer(period: number): {
     c.setAttribute("cy", "14");
     c.setAttribute("r", "11.5");
     c.setAttribute("fill", "none");
-    c.setAttribute("stroke-width", cls === "fill" ? "3" : "2.6");
+    c.setAttribute("stroke-width", cls === "fill" ? "2.4" : "2");
     return c;
   };
   const track = mk("track");
@@ -595,7 +595,7 @@ function accountCard(a: AccountDto): HTMLElement {
   card.dataset.id = a.id;
 
   const avatar = el("div", "avatar", (a.issuer || a.name || "?").charAt(0).toUpperCase());
-  avatar.style.background = avatarColor(a.issuer + "/" + a.name);
+  avatar.style.setProperty("--h", String(avatarHue(a.issuer + "/" + a.name)));
 
   const meta = el("div", "meta");
   meta.append(el("div", "issuer", a.issuer || a.name), el("div", "name", a.issuer ? a.name : ""));
@@ -861,7 +861,7 @@ function applyCodes(codes: CodeDto[]) {
     }
     if (ref.fill) {
       ref.fill.style.strokeDashoffset = String(72.26 * (1 - dto.progress));
-      ref.fill.style.stroke = dto.remaining <= 5 ? "var(--danger)" : "";
+      ref.fill.style.stroke = dto.remaining <= 5 ? "var(--danger)" : dto.remaining <= 10 ? "var(--warn)" : "";
     }
     if (ref.remain) ref.remain.textContent = String(dto.remaining);
   }
@@ -999,7 +999,7 @@ function renderMain() {
   };
 
   const addB = iconBtn("plus", t("main.add"));
-  addB.style.color = "var(--accent)";
+  addB.classList.add("add");
   addB.onclick = () => openAddModal();
 
   // Group filter dropdown (rebuilt in renderList).
